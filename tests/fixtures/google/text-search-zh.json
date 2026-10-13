@@ -1,0 +1,22 @@
+{
+  "places": [
+    {
+      "id": "fixture-google-lilia",
+      "types": ["italian_restaurant", "restaurant", "food", "point_of_interest", "establishment"],
+      "formattedAddress": "567 Union Ave, Brooklyn, NY 11211美国",
+      "location": { "latitude": 40.7176, "longitude": -73.9524 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000003",
+      "displayName": { "text": "Lilia", "languageCode": "en" },
+      "primaryType": "italian_restaurant"
+    },
+    {
+      "id": "fixture-google-moma",
+      "types": ["art_museum", "museum", "tourist_attraction", "point_of_interest", "establishment"],
+      "formattedAddress": "11 W 53rd St, New York, NY 10019美国",
+      "location": { "latitude": 40.7614327, "longitude": -73.9776216 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000004",
+      "displayName": { "text": "现代艺术博物馆", "languageCode": "zh-CN" },
+      "primaryType": "art_museum"
+    }
+  ]
+}

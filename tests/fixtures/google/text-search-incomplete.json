@@ -1,0 +1,12 @@
+{
+  "places": [
+    { "id": "fixture-no-location", "displayName": { "text": "No location" } },
+    { "displayName": { "text": "No id" }, "location": { "latitude": 1, "longitude": 2 } },
+    { "id": "fixture-no-name", "location": { "latitude": 1, "longitude": 2 } },
+    {
+      "id": "fixture-minimal",
+      "displayName": { "text": "Minimal" },
+      "location": { "latitude": 40.7, "longitude": -74.0 }
+    }
+  ]
+}

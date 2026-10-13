@@ -32,6 +32,16 @@ export default defineConfig({
           fileParallelism: false,
         },
       },
+      {
+        // Real provider calls; only via `RUN_LIVE=1 pnpm test:live`.
+        extends: true,
+        test: {
+          name: "live",
+          include: ["tests/live/**/*.live.test.ts"],
+          setupFiles: ["tests/live/setup.ts"],
+          testTimeout: 15_000,
+        },
+      },
     ],
   },
 });

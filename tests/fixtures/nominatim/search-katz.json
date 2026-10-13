@@ -1,0 +1,36 @@
+[
+  {
+    "place_id": 123456,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "node",
+    "osm_id": 2000000001,
+    "lat": "40.7223000",
+    "lon": "-73.9874000",
+    "category": "amenity",
+    "type": "restaurant",
+    "place_rank": 30,
+    "importance": 0.3,
+    "addresstype": "amenity",
+    "name": "Katz's Delicatessen",
+    "display_name": "Katz's Delicatessen, 205, East Houston Street, Lower East Side, Manhattan, New York County, New York, 10002, United States",
+    "boundingbox": ["40.7222500", "40.7223500", "-73.9874500", "-73.9873500"]
+  },
+  {
+    "place_id": 654321,
+    "osm_type": "way",
+    "osm_id": 3000000001,
+    "lat": "40.7829",
+    "lon": "-73.9654",
+    "category": "leisure",
+    "type": "park",
+    "name": "",
+    "display_name": "Central Park, Manhattan, New York County, New York, United States"
+  },
+  {
+    "place_id": 1,
+    "osm_type": "node",
+    "lat": "not-a-number",
+    "lon": "0",
+    "name": "Broken"
+  }
+]
