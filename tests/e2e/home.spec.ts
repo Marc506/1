@@ -1,4 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
+
+test.beforeEach(async ({ signIn }) => {
+  await signIn();
+});
 
 test.describe("home (en)", () => {
   test.use({ locale: "en-US" });

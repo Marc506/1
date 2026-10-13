@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { defineConfig, devices, webkit } from "@playwright/test";
+import { E2E_PASSWORD, E2E_SESSION_SECRET } from "./tests/e2e/env";
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://localhost:${PORT}`;
@@ -36,6 +37,7 @@ export default defineConfig({
     command: `pnpm build && pnpm start -p ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
+    env: { APP_PASSWORD: E2E_PASSWORD, SESSION_SECRET: E2E_SESSION_SECRET },
     timeout: 240_000,
     stdout: "ignore",
     stderr: "pipe",
