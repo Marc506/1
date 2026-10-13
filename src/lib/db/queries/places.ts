@@ -1,4 +1,13 @@
-import { and, desc, eq, getTableColumns, isNotNull, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  isNotNull,
+  sql,
+} from "drizzle-orm";
 import type { Db } from "../client";
 import {
   collectionPlaces,
@@ -7,6 +16,7 @@ import {
   places,
   type PlaceCategory,
   type SourceKind,
+  type VisitStatus,
 } from "../schema";
 import { isUuid } from "./collections";
 
@@ -174,12 +184,26 @@ export type CollectionPlace = Place & {
   mentionCount: number;
 };
 
+export type PlaceListOptions = {
+  category?: PlaceCategory | null;
+  status?: VisitStatus | null;
+  tag?: string | null;
+  sort?: "recent" | "priority" | "name";
+};
+
 export async function listCollectionPlaces(
   db: Db,
   ownerId: string,
   collectionId: string,
+  opts: PlaceListOptions = {},
 ): Promise<CollectionPlace[]> {
   if (!isUuid(collectionId)) return [];
+  const order =
+    opts.sort === "priority"
+      ? [desc(places.priority), desc(collectionPlaces.addedAt)]
+      : opts.sort === "name"
+        ? [asc(sql`lower(${places.name})`)]
+        : [desc(collectionPlaces.addedAt)];
   return db
     .select({
       ...getTableColumns(places),
@@ -193,7 +217,39 @@ export async function listCollectionPlaces(
         eq(collectionPlaces.ownerId, ownerId),
         eq(collectionPlaces.collectionId, collectionId),
         eq(places.ownerId, ownerId),
+        opts.category ? eq(places.category, opts.category) : undefined,
+        opts.status ? eq(places.status, opts.status) : undefined,
+        opts.tag ? arrayContains(places.tags, [opts.tag]) : undefined,
       ),
     )
-    .orderBy(desc(collectionPlaces.addedAt));
+    .orderBy(...order);
+}
+
+export type CollectionFacets = {
+  total: number;
+  categories: { value: PlaceCategory; count: number }[];
+  statuses: { value: VisitStatus; count: number }[];
+  tags: { value: string; count: number }[];
+};
+
+/** What filters make sense for a collection, with counts (unfiltered). */
+export async function collectionFacets(
+  db: Db,
+  ownerId: string,
+  collectionId: string,
+): Promise<CollectionFacets> {
+  const rows = await listCollectionPlaces(db, ownerId, collectionId);
+  const count = <T extends string>(values: T[]) => {
+    const m = new Map<T, number>();
+    for (const v of values) m.set(v, (m.get(v) ?? 0) + 1);
+    return [...m]
+      .map(([value, n]) => ({ value, count: n }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  };
+  return {
+    total: rows.length,
+    categories: count(rows.map((r) => r.category)),
+    statuses: count(rows.map((r) => r.status)),
+    tags: count(rows.flatMap((r) => r.tags)),
+  };
 }

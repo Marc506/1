@@ -21,7 +21,7 @@ test("creates a collection with a city and lists it", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "NYC spring break" }),
   ).toBeVisible();
-  await expect(page.getByText("New York", { exact: true })).toBeVisible();
+  await expect(page.locator("header p")).toHaveText("New York · 0 places");
   // The mock Google API located the city, so there is no warning.
   await expect(page.getByRole("status")).toHaveCount(0);
   await expect(
@@ -59,7 +59,7 @@ test("warns when the city cannot be located", async ({ page }) => {
   await page.getByRole("link", { name: "Edit" }).click();
   await page.getByLabel("City (optional)").fill("New York");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("New York", { exact: true })).toBeVisible();
+  await expect(page.locator("header p")).toContainText("New York");
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
@@ -86,7 +86,7 @@ test("edits, archives and restores a collection", async ({ page }) => {
     page.getByRole("heading", { name: "Archived collections" }),
   ).toBeVisible();
   await page.getByRole("link", { name: /Tokyo 2027/ }).click();
-  await expect(page.getByText("Archived", { exact: true })).toBeVisible();
+  await expect(page.locator("header p")).toContainText("Archived");
 
   await page.getByRole("link", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Unarchive" }).click();

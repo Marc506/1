@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { createDb } from "@/lib/db/client";
 import { createCollection } from "@/lib/db/queries/collections";
 import {
+  collectionFacets,
   listCollectionPlaces,
   mostRecentPlaceCoords,
   savePlaceToCollection,
@@ -331,6 +332,86 @@ describe("searchForCollection", () => {
     ).toEqual({
       ok: false,
       error: "collection_not_found",
+    });
+  });
+});
+
+describe("listCollectionPlaces filters and facets", () => {
+  async function seed() {
+    const col = await createCollection(db, "alice", nycFields);
+    const add = (
+      name: string,
+      category: Candidate["category"],
+      extra: Partial<SavePlaceInput> = {},
+    ) =>
+      savePlaceToCollection(db, "alice", {
+        collectionId: col.id,
+        place: { ...katz, providerPlaceId: `g-${name}`, name, category },
+        ...extra,
+      });
+    await add("b Katz", "restaurant", {
+      tags: ["deli", "late night"],
+      priority: 1,
+    });
+    await add("Abraço", "cafe", { tags: ["coffee"], priority: 2 });
+    await add("Lilia", "restaurant", { tags: ["late night"], priority: 0 });
+    await db
+      .update(places)
+      .set({ status: "visited" })
+      .where(eq(places.name, "Lilia"));
+    return col;
+  }
+
+  it("filters by category, status and tag", async () => {
+    const col = await seed();
+    const names = async (opts: Parameters<typeof listCollectionPlaces>[3]) =>
+      (await listCollectionPlaces(db, "alice", col.id, opts)).map(
+        (p) => p.name,
+      );
+
+    expect(await names({ category: "restaurant" })).toEqual([
+      "Lilia",
+      "b Katz",
+    ]);
+    expect(await names({ status: "visited" })).toEqual(["Lilia"]);
+    expect(await names({ tag: "late night" })).toEqual(["Lilia", "b Katz"]);
+    expect(await names({ tag: "late night", status: "want_to_go" })).toEqual([
+      "b Katz",
+    ]);
+    expect(await names({ category: "cafe", tag: "deli" })).toEqual([]);
+  });
+
+  it("sorts by recent, priority and name", async () => {
+    const col = await seed();
+    const names = async (sort: "recent" | "priority" | "name") =>
+      (await listCollectionPlaces(db, "alice", col.id, { sort })).map(
+        (p) => p.name,
+      );
+    expect(await names("recent")).toEqual(["Lilia", "Abraço", "b Katz"]);
+    expect(await names("priority")).toEqual(["Abraço", "b Katz", "Lilia"]);
+    expect(await names("name")).toEqual(["Abraço", "b Katz", "Lilia"]);
+  });
+
+  it("counts facets for the whole collection", async () => {
+    const col = await seed();
+    expect(await collectionFacets(db, "alice", col.id)).toEqual({
+      total: 3,
+      categories: [
+        { value: "restaurant", count: 2 },
+        { value: "cafe", count: 1 },
+      ],
+      statuses: [
+        { value: "visited", count: 1 },
+        { value: "want_to_go", count: 2 },
+      ].sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+      tags: [
+        { value: "late night", count: 2 },
+        { value: "coffee", count: 1 },
+        { value: "deli", count: 1 },
+      ],
+    });
+    expect(await collectionFacets(db, "bob", col.id)).toMatchObject({
+      total: 0,
     });
   });
 });
