@@ -16,6 +16,10 @@ test.describe("home (en)", () => {
       page.getByRole("heading", { level: 1, name: "PlaceBook" }),
     ).toBeVisible();
     await expect(page.getByText("No collections yet")).toBeVisible();
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+      "content",
+      /^Save great places/,
+    );
   });
 });
 
@@ -26,5 +30,9 @@ test.describe("home (zh-CN)", () => {
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await expect(page.getByText("还没有收藏")).toBeVisible();
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+      "content",
+      /^把在别处看到的好地方存下来/,
+    );
   });
 });

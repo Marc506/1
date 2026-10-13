@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { getLocale } from "@/lib/i18n/server";
+import { getDictionary, getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "PlaceBook",
-  description: "Save places you want to go, then navigate in one tap.",
-  appleWebApp: { capable: true, title: "PlaceBook" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getDictionary();
+  return {
+    title: t.appName,
+    description: t.tagline,
+    appleWebApp: { capable: true, title: t.appName },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
