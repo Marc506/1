@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PageShell, BackLink } from "@/components/page-shell";
-import { logout } from "@/lib/auth/actions";
 import { requireOwnerId } from "@/lib/auth/server";
 import { getDb } from "@/lib/db/client";
 import {
@@ -45,14 +44,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <h1 className="text-2xl font-semibold tracking-tight">{t.appName}</h1>
           <p className="mt-1 text-sm text-muted">{t.tagline}</p>
         </div>
-        <form action={logout}>
-          <button
-            type="submit"
-            className="shrink-0 rounded-lg px-2 py-1 text-sm whitespace-nowrap text-muted active:bg-border"
-          >
-            {t.auth.logout}
-          </button>
-        </form>
+        <Link
+          href="/settings"
+          className="shrink-0 rounded-lg px-2 py-1 text-sm whitespace-nowrap text-accent active:bg-border"
+        >
+          {t.settings.open}
+        </Link>
       </header>
 
       <Link

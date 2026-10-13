@@ -20,6 +20,7 @@ test("signs in with the password and signs out", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "PlaceBook" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/");

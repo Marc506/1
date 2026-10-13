@@ -17,6 +17,8 @@ export type CollectionMapPlace = {
   status: VisitStatus;
   /** Shown under the name in the popup, e.g. "Restaurant · 205 E Houston St". */
   subtitle: string;
+  /** Detail page; the popup title links there. */
+  href: string;
 };
 
 /** Above this many places, pins are clustered on the GPU instead of drawn as
@@ -57,8 +59,9 @@ export function CollectionMap({
       const popupFor = (p: CollectionMapPlace) => {
         const root = document.createElement("div");
         root.className = "min-w-40 text-sm";
-        const title = document.createElement("div");
-        title.className = "font-medium text-[#1c1c1e]";
+        const title = document.createElement("a");
+        title.href = p.href;
+        title.className = "block font-medium text-[#0a7c5a] underline";
         title.textContent = p.name;
         const sub = document.createElement("div");
         sub.className = "text-[#6b6b70]";

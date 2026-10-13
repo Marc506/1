@@ -253,3 +253,133 @@ export async function collectionFacets(
     tags: count(rows.flatMap((r) => r.tags)),
   };
 }
+
+export type Mention = typeof mentions.$inferSelect;
+
+export type PlaceDetail = Place & {
+  mentions: Mention[];
+  collections: { id: string; name: string; emoji: string | null }[];
+};
+
+export async function getPlaceDetail(
+  db: Db,
+  ownerId: string,
+  placeId: string,
+): Promise<PlaceDetail | undefined> {
+  if (!isUuid(placeId)) return undefined;
+  const [place] = await db
+    .select()
+    .from(places)
+    .where(and(eq(places.ownerId, ownerId), eq(places.id, placeId)));
+  if (!place) return undefined;
+  const [placeMentions, placeCollections] = await Promise.all([
+    db
+      .select()
+      .from(mentions)
+      .where(and(eq(mentions.ownerId, ownerId), eq(mentions.placeId, placeId)))
+      .orderBy(desc(mentions.createdAt)),
+    db
+      .select({
+        id: collections.id,
+        name: collections.name,
+        emoji: collections.emoji,
+      })
+      .from(collectionPlaces)
+      .innerJoin(collections, eq(collections.id, collectionPlaces.collectionId))
+      .where(
+        and(
+          eq(collectionPlaces.ownerId, ownerId),
+          eq(collectionPlaces.placeId, placeId),
+          eq(collections.ownerId, ownerId),
+        ),
+      )
+      .orderBy(asc(collections.name)),
+  ]);
+  return { ...place, mentions: placeMentions, collections: placeCollections };
+}
+
+export type PlacePatch = Partial<
+  Pick<Place, "name" | "status" | "priority" | "note" | "tags" | "category">
+>;
+
+export async function updatePlace(
+  db: Db,
+  ownerId: string,
+  placeId: string,
+  patch: PlacePatch,
+): Promise<boolean> {
+  if (!isUuid(placeId) || Object.keys(patch).length === 0) return false;
+  const rows = await db
+    .update(places)
+    .set(patch)
+    .where(and(eq(places.ownerId, ownerId), eq(places.id, placeId)))
+    .returning({ id: places.id });
+  return rows.length > 0;
+}
+
+export async function addMention(
+  db: Db,
+  ownerId: string,
+  placeId: string,
+  mention: {
+    why: string | null;
+    sourceKind: SourceKind;
+    sourceUrl: string | null;
+  },
+): Promise<boolean> {
+  if (!isUuid(placeId)) return false;
+  const [place] = await db
+    .select({ id: places.id })
+    .from(places)
+    .where(and(eq(places.ownerId, ownerId), eq(places.id, placeId)));
+  if (!place) return false;
+  await db.insert(mentions).values({ ownerId, placeId, ...mention });
+  return true;
+}
+
+export async function deleteMention(
+  db: Db,
+  ownerId: string,
+  mentionId: string,
+): Promise<boolean> {
+  if (!isUuid(mentionId)) return false;
+  const rows = await db
+    .delete(mentions)
+    .where(and(eq(mentions.ownerId, ownerId), eq(mentions.id, mentionId)))
+    .returning({ id: mentions.id });
+  return rows.length > 0;
+}
+
+/** Deletes the place everywhere (links and mentions cascade). */
+export async function deletePlace(
+  db: Db,
+  ownerId: string,
+  placeId: string,
+): Promise<boolean> {
+  if (!isUuid(placeId)) return false;
+  const rows = await db
+    .delete(places)
+    .where(and(eq(places.ownerId, ownerId), eq(places.id, placeId)))
+    .returning({ id: places.id });
+  return rows.length > 0;
+}
+
+export async function removePlaceFromCollection(
+  db: Db,
+  ownerId: string,
+  placeId: string,
+  collectionId: string,
+): Promise<boolean> {
+  if (!isUuid(placeId) || !isUuid(collectionId)) return false;
+  const rows = await db
+    .delete(collectionPlaces)
+    .where(
+      and(
+        eq(collectionPlaces.ownerId, ownerId),
+        eq(collectionPlaces.placeId, placeId),
+        eq(collectionPlaces.collectionId, collectionId),
+      ),
+    )
+    .returning({ placeId: collectionPlaces.placeId });
+  return rows.length > 0;
+}

@@ -3,10 +3,16 @@ import { afterAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { createDb } from "@/lib/db/client";
 import { createCollection } from "@/lib/db/queries/collections";
 import {
+  addMention,
   collectionFacets,
+  deleteMention,
+  deletePlace,
+  getPlaceDetail,
   listCollectionPlaces,
   mostRecentPlaceCoords,
+  removePlaceFromCollection,
   savePlaceToCollection,
+  updatePlace,
   type SavePlaceInput,
 } from "@/lib/db/queries/places";
 import { mentions, places, searchCache } from "@/lib/db/schema";
@@ -413,5 +419,93 @@ describe("listCollectionPlaces filters and facets", () => {
     expect(await collectionFacets(db, "bob", col.id)).toMatchObject({
       total: 0,
     });
+  });
+});
+
+describe("place detail and edits", () => {
+  async function seedOne() {
+    const col = await createCollection(db, "alice", nycFields);
+    const saved = await savePlaceToCollection(
+      db,
+      "alice",
+      input(col.id, { why: "Pastrami" }),
+    );
+    if (!saved.ok) throw new Error("unreachable");
+    return { col, placeId: saved.placeId };
+  }
+
+  it("reads a place with its mentions and collections, for its owner only", async () => {
+    const { col, placeId } = await seedOne();
+    const detail = await getPlaceDetail(db, "alice", placeId);
+    expect(detail).toMatchObject({
+      name: "Katz's Delicatessen",
+      mentions: [{ why: "Pastrami" }],
+      collections: [{ id: col.id, name: "NYC" }],
+    });
+    expect(await getPlaceDetail(db, "bob", placeId)).toBeUndefined();
+    expect(await getPlaceDetail(db, "alice", "nope")).toBeUndefined();
+  });
+
+  it("updates fields only for the owner", async () => {
+    const { placeId } = await seedOne();
+    expect(await updatePlace(db, "bob", placeId, { status: "visited" })).toBe(
+      false,
+    );
+    expect(
+      await updatePlace(db, "alice", placeId, {
+        status: "visited",
+        priority: 2,
+        tags: ["x"],
+      }),
+    ).toBe(true);
+    expect(await getPlaceDetail(db, "alice", placeId)).toMatchObject({
+      status: "visited",
+      priority: 2,
+      tags: ["x"],
+    });
+    expect(await updatePlace(db, "alice", placeId, {})).toBe(false);
+  });
+
+  it("adds and deletes mentions for the owner only", async () => {
+    const { placeId } = await seedOne();
+    expect(
+      await addMention(db, "bob", placeId, {
+        why: "x",
+        sourceKind: "web",
+        sourceUrl: null,
+      }),
+    ).toBe(false);
+    expect(
+      await addMention(db, "alice", placeId, {
+        why: null,
+        sourceKind: "web",
+        sourceUrl: "https://e.com",
+      }),
+    ).toBe(true);
+    const detail = await getPlaceDetail(db, "alice", placeId);
+    expect(detail?.mentions).toHaveLength(2);
+    const id = detail!.mentions[0].id;
+    expect(await deleteMention(db, "bob", id)).toBe(false);
+    expect(await deleteMention(db, "alice", id)).toBe(true);
+    expect((await getPlaceDetail(db, "alice", placeId))?.mentions).toHaveLength(
+      1,
+    );
+  });
+
+  it("removes from a collection and deletes the place", async () => {
+    const { col, placeId } = await seedOne();
+    expect(await removePlaceFromCollection(db, "bob", placeId, col.id)).toBe(
+      false,
+    );
+    expect(await removePlaceFromCollection(db, "alice", placeId, col.id)).toBe(
+      true,
+    );
+    expect(await listCollectionPlaces(db, "alice", col.id)).toEqual([]);
+    expect(await getPlaceDetail(db, "alice", placeId)).toBeDefined();
+
+    expect(await deletePlace(db, "bob", placeId)).toBe(false);
+    expect(await deletePlace(db, "alice", placeId)).toBe(true);
+    expect(await getPlaceDetail(db, "alice", placeId)).toBeUndefined();
+    expect(await db.select().from(mentions)).toHaveLength(0);
   });
 });

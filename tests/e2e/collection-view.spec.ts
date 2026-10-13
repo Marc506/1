@@ -90,7 +90,7 @@ async function openFilters(page: Page) {
 function listNames(page: Page) {
   return page
     .getByRole("list", { name: "List" })
-    .locator("li > div > span:first-child");
+    .locator("li > a > div > span:first-child");
 }
 
 test("filters by category and tag, and sorts", async ({ page }) => {

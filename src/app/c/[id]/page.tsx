@@ -142,10 +142,11 @@ export default async function CollectionPage({
                 subtitle: [t.categories[p.category], p.formattedAddress]
                   .filter(Boolean)
                   .join(" · "),
+                href: `/p/${p.id}?from=${collection.id}`,
               }))}
             />
           ) : (
-            <PlaceList places={places} t={t} />
+            <PlaceList places={places} collectionId={collection.id} t={t} />
           )}
         </>
       )}
@@ -328,9 +329,11 @@ function Toolbar({
 
 function PlaceList({
   places,
+  collectionId,
   t,
 }: {
   places: CollectionPlace[];
+  collectionId: string;
   t: Dictionary;
 }) {
   return (
@@ -343,37 +346,42 @@ function PlaceList({
         const showBadges =
           p.priority === 2 || p.status !== "want_to_go" || p.tags.length > 0;
         return (
-          <li key={p.id} className="flex gap-3 px-4 py-3">
-            <span
-              aria-hidden
-              className="mt-1.5 size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: pinColor(p.category, visited) }}
-            />
-            <div className="flex min-w-0 flex-1 flex-col">
+          <li key={p.id}>
+            <Link
+              href={`/p/${p.id}?from=${collectionId}`}
+              className="flex gap-3 px-4 py-3 active:bg-border"
+            >
               <span
-                className={`text-base font-medium ${visited ? "text-muted" : ""}`}
-              >
-                {p.name}
-              </span>
-              <span className="text-sm text-muted">
-                {[t.categories[p.category], p.formattedAddress]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-              {showBadges && (
-                <span className="mt-1 flex flex-wrap gap-1">
-                  {p.priority === 2 && (
-                    <Badge tone="accent">{t.add.priority2}</Badge>
-                  )}
-                  {p.status !== "want_to_go" && (
-                    <Badge>{t.statuses[p.status]}</Badge>
-                  )}
-                  {p.tags.map((tag) => (
-                    <Badge key={tag}>#{tag}</Badge>
-                  ))}
+                aria-hidden
+                className="mt-1.5 size-3 shrink-0 rounded-full"
+                style={{ backgroundColor: pinColor(p.category, visited) }}
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span
+                  className={`text-base font-medium ${visited ? "text-muted" : ""}`}
+                >
+                  {p.name}
                 </span>
-              )}
-            </div>
+                <span className="text-sm text-muted">
+                  {[t.categories[p.category], p.formattedAddress]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                {showBadges && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {p.priority === 2 && (
+                      <Badge tone="accent">{t.add.priority2}</Badge>
+                    )}
+                    {p.status !== "want_to_go" && (
+                      <Badge>{t.statuses[p.status]}</Badge>
+                    )}
+                    {p.tags.map((tag) => (
+                      <Badge key={tag}>#{tag}</Badge>
+                    ))}
+                  </span>
+                )}
+              </div>
+            </Link>
           </li>
         );
       })}
