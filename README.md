@@ -41,3 +41,12 @@ pnpm dev
 
 E2E tests build the app and start it on port 3100. When WebKit is not
 installed they run the iPhone viewport on Chromium instead.
+
+## Deployment (Vercel + Neon)
+
+`pnpm build` first runs `scripts/migrate-on-deploy.mjs`, which applies the
+migrations in `drizzle/` on Vercel production builds. Preview builds skip it
+unless `MIGRATE_ON_PREVIEW=1` is set (only do that when each preview has its
+own database branch). Required environment variables: `DATABASE_URL`,
+`APP_PASSWORD`, `SESSION_SECRET`, `GEOCODING_PROVIDER`, and
+`GOOGLE_MAPS_API_KEY` when using Google.
