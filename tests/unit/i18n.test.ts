@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dictionaries } from "@/lib/i18n/dictionaries";
+import { fmt } from "@/lib/i18n/format";
 import { DEFAULT_LOCALE, pickLocale } from "@/lib/i18n/locale";
 
 function leafPaths(value: unknown, prefix = ""): string[] {
@@ -46,5 +47,14 @@ describe("pickLocale", () => {
     expect(pickLocale(undefined, undefined)).toBe(DEFAULT_LOCALE);
     expect(pickLocale(undefined, "fr-FR,de")).toBe(DEFAULT_LOCALE);
     expect(pickLocale(undefined, "zh;q=0")).toBe(DEFAULT_LOCALE);
+  });
+});
+
+describe("fmt", () => {
+  it("fills placeholders and leaves unknown ones", () => {
+    expect(fmt("{count} 个地点", { count: 3 })).toBe("3 个地点");
+    expect(fmt("没能定位「{city}」{x}", { city: "Tokyo" })).toBe(
+      "没能定位「Tokyo」{x}",
+    );
   });
 });

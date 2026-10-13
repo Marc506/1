@@ -1,6 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test.beforeEach(async ({ signIn }) => {
+  // A fresh owner, so the home page is empty.
   await signIn();
 });
 

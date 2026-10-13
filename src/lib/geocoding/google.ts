@@ -90,15 +90,25 @@ export class GooglePlacesProvider implements GeocodingProvider {
   readonly id = "google" as const;
   private readonly fetch: FetchLike;
 
-  constructor(private readonly opts: { apiKey: string; fetch?: FetchLike }) {
+  private readonly endpoint: string;
+
+  constructor(
+    private readonly opts: {
+      apiKey: string;
+      fetch?: FetchLike;
+      /** Overrides the Text Search URL; E2E tests point it at a local mock. */
+      endpoint?: string;
+    },
+  ) {
     if (!opts.apiKey) throw new Error("GOOGLE_MAPS_API_KEY is not set");
     this.fetch = opts.fetch ?? ((input, init) => fetch(input, init));
+    this.endpoint = opts.endpoint || GOOGLE_TEXT_SEARCH_URL;
   }
 
   async search(q: SearchQuery): Promise<Candidate[]> {
     let res: Response;
     try {
-      res = await this.fetch(GOOGLE_TEXT_SEARCH_URL, {
+      res = await this.fetch(this.endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
