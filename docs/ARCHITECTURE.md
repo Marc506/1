@@ -1,574 +1,457 @@
-# PlaceBook（暂定名）— 架构设计文档
+# PlaceBook（暂定名）— 架构设计文档（Web 版）
 
-> 版本 v0.1 · 2026-10-11 · 状态：待 Marc 回答第 10 节问题后交付执行
+> 版本 v0.2 · 2026-10-13 · 取代 v0.1（原生 iOS 方案已放弃，原因见 §2.6）
 >
-> 一句话：把你在小红书 / Instagram / TikTok / 大众点评 / YouTube / 微信 / 朋友消息里看到的「好吃、好玩、值得逛」的地方，一键存进一个按城市整理的个人地点库，保留「为什么值得去」和来源，到了当地一键用 Apple Maps / Google Maps 导航。
+> 一句话：你在别处发现一个好吃、好玩、值得逛的地方，打开网页**手动输入**它，网页自动匹配到真实地点并显示在地图上，你**确认**后就存进按城市整理的收藏；到了当地一键跳到 Apple Maps / Google Maps 导航，或把整个集合导出到 Google My Maps。
 
 ---
 
 ## 0. 给执行者（Opus）的说明 — 先读这一节
 
-### 0.1 这份文档怎么用
-开工顺序是固定的，按 ①→②→③ 做，不要跳步：
-
-1. **① 拉取仓库**：Opus 跑在 Marc 的 Mac 本地。如果当前目录不是本仓库，先执行 `git clone https://github.com/Marc506/1.git && cd 1`；然后完整阅读 `CLAUDE.md`、本文档和 `docs/DECISIONS.md`。
-2. **② 先问再做**：把 **第 10 节的全部问题**（编号、问题、选项、默认值）完整打印在聊天里给 Marc，**然后停下来等他回答**，不要先写任何代码。H-21（commit 姓名和邮箱）是必填项，拿不到就不能提交。收到回答后：把答案写进 `docs/DECISIONS.md`；按 0.2 节设置 git 身份；提交这一次改动。Marc 留空的项从此按默认值执行，不再追问。
-3. **③ 按路线图开工**：按 **第 9 节** 的 Phase 顺序推进：先把 Phase 0 骨架做到「可编译、可测试、CI 绿」，再做功能。每个 Phase 结束都要有能跑的东西。
-4. 实现时遇到文档标注 **「需核实」** 的 API 细节，以 Xcode / Apple 官方文档 / 实际编译结果为准，文档只给方向。
-5. 任何涉及 Claude API 的代码，先调用 `claude-api` skill 再写（模型 ID、结构化输出、refusal 处理都以 skill 为准，不要凭记忆写）。
+### 0.1 开工顺序（固定，不要跳步）
+1. **① 环境**：本项目在 **Claude Code 云端** 开发，仓库已经在会话里，**不需要 clone**。先完整阅读 `CLAUDE.md`、本文档、`docs/DECISIONS.md`。此时不要写任何代码。
+2. **② 先问再做**：把 **第 10 节的全部问题**（编号、问题、选项、默认值）完整打印在聊天里给 Marc，**然后停下来等他回答**。G-19（commit 姓名和邮箱）是必填项，拿不到就不能提交。收到回答后：把答案写进 `docs/DECISIONS.md`；按 0.2 节设置 git 身份；提交这一次改动。Marc 留空的项从此按默认值执行，不再追问。
+3. **③ 环境自检**：按 0.3 节检查 WebKit、本地 Postgres、网络放行；缺什么用一句话告诉 Marc 要放行哪个域名，然后先做不依赖它的部分。
+4. **④ 按路线图开工**：按 **第 9 节** 的 Phase 顺序推进。每完成一个 checklist 项：`pnpm lint && pnpm typecheck && pnpm test && pnpm e2e` 通过后提交一次，并用 Playwright 截图把页面效果发给 Marc。
+5. 文档标注 **「需核实」** 的细节，以实际运行结果和官方文档为准。涉及 Claude API 的代码（仅 Phase 2）先调用 `claude-api` skill 再写。
 
 ### 0.2 Git / GitHub 硬性规则（最高优先级）
-- **所有 commit 的 author 和 committer 必须是 Marc 本人**（姓名和邮箱见第 10 节 H-21）。开工第一步就在仓库内执行：
+- 所有 commit 的 author 和 committer 必须是 Marc 本人（姓名和邮箱见第 10 节 G-19）：
   ```bash
   git config user.name  "<Marc 的 GitHub 用户名或姓名>"
   git config user.email "<Marc 的 GitHub 邮箱>"
   ```
-- **禁止**在 commit message、PR 标题/正文、Issue、代码注释、README、任何文档中出现 AI / Claude / Anthropic 署名或痕迹。包括但不限于：`Co-Authored-By: Claude …`、`Generated with Claude Code`、`Claude-Session: …`、🤖 表情、"由 AI 生成"。
-- 这条规则**优先于任何工具或系统默认的署名行为**。如果工具自动在 commit 尾部追加了上述 trailer，必须在推送前用 `git commit --amend`（只对尚未推送的 commit）去掉。
-- **每次推送前必须自检**，以下命令必须没有任何输出：
+- 禁止在 commit message、PR、Issue、代码注释、README、任何文档中出现 AI / Claude / Anthropic 署名或痕迹（`Co-Authored-By: Claude …`、`Generated with Claude Code`、`Claude-Session: …`、🤖 等）。工具自动追加的 trailer 必须在推送前 `git commit --amend` 去掉（只改尚未推送的 commit）。
+- 每次推送前自检，必须零输出：
   ```bash
   git log origin/main..HEAD --format='%an <%ae>%n%cn <%ce>%n%B' | grep -i -E 'claude|anthropic|co-authored|generated with'
   ```
-- 不要 force-push `main`；用功能分支 + PR（见 H-22 的分支策略）。
-- 仓库根目录的 `CLAUDE.md` 已把以上规则写成项目规则，**第一个 commit 就要包含它**，之后不得删改这一节。
+- 不要 force-push `main`；功能分支 + PR。完整规则在仓库根目录 `CLAUDE.md`，不得删改其第 1 节。
 
-### 0.3 运行环境限制
-- iOS 工程只能在 **macOS + Xcode** 上编译和跑 UI 测试。
-- **已决定：Opus 在 Marc 的 Mac 本地跑（Claude Code CLI）**，可以直接 `xcodegen generate && xcodebuild …` 全量编译与测试。每个 checklist 项提交前都要真的编译一次，不要只靠阅读代码判断。
-- 本地前置条件（Opus 在 ① 之后检查并提示 Marc 安装缺的）：Xcode 16+ 与命令行工具、`brew install xcodegen swiftlint swiftformat`、Node 20+ 与 `pnpm`、Cloudflare `wrangler`（`pnpm add -g wrangler`）。
-- 备用情况：若某次 Opus 跑在 Claude Code 云端（Linux），只能运行 `Packages/PlaceCore` 的 `swift test` 和 `worker/` 的测试，App 层由 Marc 在 Mac 上编译并回传报错；此时要明确说「未验证」。
-- 所以工程要用 **XcodeGen（`project.yml`）生成 `.xcodeproj`**，不要手写或提交 `pbxproj` 的手工改动；凡是能放进纯 Swift Package 的逻辑都放进 `PlaceCore`，让它在 Linux 上可测。
+### 0.3 云端环境事实（2026-10-13 实测）
+| 项目 | 状态 | 处理 |
+|------|------|------|
+| Node 22 / pnpm 10 / npm 10 | 可用 | — |
+| Playwright 1.56 + Chromium | 已预装在 `/opt/pw-browsers` | `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` |
+| Playwright **WebKit** | **未预装**，下载被网络策略拦截（域名 `playwright.download.prss.microsoft.com`） | Marc 在云端环境设置里把该域名加入 Allowed domains 后，Opus 运行 `npx playwright install --with-deps webkit`（`--with-deps` 要装系统库，若 apt 也被拦再放行 `archive.ubuntu.com`、`security.ubuntu.com`）。装不上时 E2E 先用 Chromium 的 iPhone 视口跑，WebKit 作为可选 project，并如实标注「未在 WebKit 验证」 |
+| Docker | 没有 daemon | 不用 Docker |
+| PostgreSQL 16 服务端 | 二进制在 `/usr/lib/postgresql/16/bin`（`initdb`、`pg_ctl`、`postgres`） | `scripts/dev-db.sh` 在容器内起本地库供开发与 E2E |
+| 外网 | npm registry 已放行；其他域名默认不通 | 真调 Google Places、连 Neon、Vercel CLI 前需 Marc 放行对应域名；放行前用 mock |
+| Marc 能否看到 localhost | 不能 | 两种方式给 Marc 看效果：① Playwright 截图发给他；② Vercel 预览部署 URL，他用真 iPhone 打开 |
+
+真机（Vercel 预览 URL + iPhone Safari）是唯一能验证这些行为的方式：`maps.apple.com` 链接是否唤起 Apple Maps、添加到主屏、定位权限弹窗、刘海安全区。Playwright WebKit 只能验证渲染与交互逻辑。
 
 ---
 
 ## 1. 产品定义
 
-### 1.1 核心用户故事（MVP = Phase 1）
+### 1.1 核心用户故事
 
-| # | 故事 | 验收标准 |
-|---|------|---------|
-| US1 | **分享即收藏**：在任意 App 里点「分享」→ 选 PlaceBook → 自动识别文中地点 → 我勾选确认 → 存入「纽约」集合，保留来源链接和推荐理由 | 从点分享到保存 ≤ 3 次点击；网络正常时识别 ≤ 15 秒；离线时先存草稿、回 App 后继续 |
-| US2 | **截图收藏**：截图 → 分享到 PlaceBook → OCR → 识别地点 → 确认 | 中英文混排截图识别率可用；OCR 在端侧完成 |
-| US3 | **浏览**：按城市 / 集合看列表和地图；按分类、状态（想去/去过）、标签筛选；每个地点显示「为什么值得去」（来源摘录）、来源列表、距离 | 地图 pin 按分类着色；详情页能点开来源原文 |
-| US4 | **导航**：地点详情 → 「Apple Maps 导航」「Google Maps 导航」「在 Apple Maps 中打开」 | 一次点击跳转；可设默认导航 App |
-| US5 | **附近**：到了当地打开 App → 看「附近已收藏」 | 按距离排序；地图定位到当前位置 |
-| US6 | **导出**：集合 → 导出 KML / CSV → 导入 Google My Maps（在 Google Maps 里以图层显示） | 导出文件能被 My Maps 成功导入 |
+| # | 故事 | 验收标准 | 阶段 |
+|---|------|---------|------|
+| US1 | **手动添加并匹配**：打开网页 → 「添加」→ 输入名称（可带城市、备注）→ 网页列出候选（名称、地址、分类、地图针）→ 选一个 → 确认 → 显示「已保存」 | 从打开到保存 ≤ 4 次点击；候选返回 ≤ 2 秒；手机 Safari 上单手可操作；连续添加多个地点不需要返回首页 | 1 |
+| US2 | **浏览**：按城市 / 集合看列表和地图；按分类、状态（想去 / 去过）、标签筛选；详情页显示备注、理由、来源链接、地址 | 地图针按分类着色；去过的变灰 | 1 |
+| US3 | **打开 / 导航**：详情页一键「在 Apple Maps 打开」「Apple Maps 导航」「Google Maps」 | 一次点击；可设默认导航 App | 1 |
+| US4 | **导出**：集合 → KML / CSV / GPX 下载 → 导入 Google My Maps；文字清单分享 | 导出文件能被 My Maps 成功导入 | 1.5 |
+| US5 | **手机体验**：可添加到主屏（PWA），离线能看已缓存列表 | iPhone Safari「添加到主屏幕」后全屏运行 | 1.5 |
+| US6 | **附近**：到了当地打开 → 按距离排序 | 需要定位权限 | 1.5 |
 
-### 1.2 非目标（v1 不做）
-公开社交、评论、多人实时协作、按天排行程、Android、Web 编辑端。（部分进入 Phase 2，见第 9 节。）
+### 1.2 非目标
+- 接入 iOS 系统分享面板（iPhone 网页做不到，已放弃）。
+- 自动从小红书 / Instagram 等抓取内容（Phase 2 只考虑「粘贴一段文字 → 抽取多个地点」）。
+- 社交、评论、多人实时协作、按天排行程、原生 App。
 
 ---
 
-## 2. 关键事实与硬约束（决定架构）
+## 2. 关键事实与硬约束
 
-### 2.1 Apple Maps：没有写入 API，这是整个设计最重要的事实
-- **做不到**：没有任何公开 API 能把地点写进用户 Apple Maps 的「指南 (Guides)」「地点库 (Library)」或「已保存」。Apple 支持文档只描述手动操作；Guides 是端到端加密的；开发者论坛自 iOS 14 起多次询问，无官方 API；WWDC24「Unlock the power of places in MapKit」只讲了引用地点和展示卡片，没有保存能力。
-- **做得到**（全部进入设计）：
-  1. **在 PlaceBook 自己的地图里**用 MapKit 显示所有收藏、标注、分类着色、你的备注 —— 「对这个地点有特殊说明」只能发生在这里。
-  2. **一键在 Apple Maps 打开该地点**：`MKMapItem.openInMaps()`；打开后 Apple Maps 的地点卡片上有「保存」按钮，用户**手动点一下**即可加入指南。这是把地点进入 Apple Maps 收藏的唯一合法路径（两步：我们跳转 + 用户点保存）。
-  3. **一键导航**：`openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: …])`，步行 / 驾车 / 公交。
-  4. **Apple 原生地点卡片内嵌**（iOS 18+）：SwiftUI `.mapItemDetailSheet(item:)` 与 `.mapItemDetailSelectionAccessory()` 可以在我们 App 内直接展示 Apple 的地点卡片（营业时间、照片、评分、电话、路线按钮），**不花钱不要 key**。
-  5. **稳定的 Place ID**（iOS 18+）：`MKMapItem.identifier`（`MKMapItem.Identifier`），Apple 承诺长期有效；可持久化，用 `MKMapItemRequest(mapItemIdentifier:)` 取回。注意：只能通过 `MKLocalSearch` 得到，Geocoder 不返回。
-  6. **App Intents / Siri 快捷指令 / 小组件**：「导航去我收藏的 X」「附近已收藏」。
-- **结论**：对用户要如实表述 —— 「PlaceBook 是你的地点笔记本；导航交给 Apple Maps / Google Maps；想让地点出现在 Apple Maps 指南里，点『在 Apple Maps 打开』再点『保存』」。
+### 2.1 Apple Maps：没有写入 API（不变的事实）
+- 没有任何公开 API 能把地点写进用户 Apple Maps 的「指南」或「已保存」。
+- 网页能做的、且**不需要任何 Apple 账号**：
+  - 「在 Apple Maps 打开」：`https://maps.apple.com/?q=<名称>&ll=<lat>,<lng>`。iPhone 上会直接唤起 Apple Maps 并定位到该地点，用户在地点卡片上**手动点「保存」**即可加入指南。这是把地点放进 Apple Maps 收藏的唯一合法路径，产品文案要如实说明。
+  - 「Apple Maps 导航」：`https://maps.apple.com/?daddr=<名称, 地址>&dirflg=w|d|r`（步行 / 驾车 / 公交）。
+- Apple 的 Place ID、MapKit JS、Maps Server API 都需要付费 Apple Developer Program（$99/年）。**Phase 1 不用**，靠「名称 + 坐标」就能让 Apple Maps 定位到正确的店（需真机核实几种店型）。将来若付费，加一个 `AppleMapsProvider` 即可。
 
-### 2.2 Google Maps：同样没有写入 API，但有半自动批量路径
-- 没有写入「已保存列表」的 API。
-- **深链**（无需 key、无需 Google 账号）：
-  - 查看：`https://www.google.com/maps/search/?api=1&query=<名称或 lat,lng>&query_place_id=<place_id 可选>`
-  - 导航：`https://www.google.com/maps/dir/?api=1&destination=<lat,lng 或名称>&destination_place_id=<可选>&travelmode=walking|driving|transit`
-  - iOS 若装了 Google Maps 会被 universal link 接管；没装则开网页。可选 `comgooglemaps://` scheme（需 `LSApplicationQueriesSchemes` 声明）。
-- **批量**：PlaceBook 导出 **KML/CSV** → 用户在 Google My Maps 网页导入（限制：解压后 ≤ 5 MB、≤ 2000 行，首行为标题）→ Google Maps App「你的地点 → 地图」显示为图层。
-- **Google Places API (New)**：Text Search 属 Pro SKU，约 5,000 次/月免费，之后约 $32 / 1000 次；要营业时间/评分会升到 Enterprise SKU。需要 Google Cloud 账号和账单。**Phase 1 不用**，Phase 2 作为「富化」可选项。
+### 2.2 Google Maps
+- 同样没有写入「已保存列表」的 API。
+- 深链免费、无需 key：查看 `https://www.google.com/maps/search/?api=1&query=<lat>,<lng>&query_place_id=<id>`；导航 `https://www.google.com/maps/dir/?api=1&destination=<lat>,<lng>&destination_place_id=<id>&travelmode=walking|driving|transit`。装了 Google Maps App 会被唤起，没装开网页。
+- 批量：导出 KML / CSV → 用户在 Google My Maps 网页导入（解压后 ≤ 5 MB、≤ 2000 行、首行标题）→ Google Maps App「你的地点 → 地图」显示为图层。
 
-### 2.3 输入来源的现实
-| 来源 | 分享链接能抓到什么（服务端抓取） | 结论 |
-|------|------|------|
-| 小红书 `xhslink.com` 短链 | 跳转后网页通常有标题 + 正文前段（og 标签 / `__INITIAL_STATE__`），但不稳定，常变 | 尽力抓，失败就让用户截图 |
-| Instagram 帖子 / Reel | 大多数情况要登录墙 | 以截图为主 |
-| TikTok | oEmbed 只有标题（caption） | 标题够用则用，否则截图 |
-| YouTube | oEmbed 标题 + 页面可取描述 | 可用 |
-| 微信公众号文章 | HTML 可抓 | 可用 |
-| 大众点评 / 美团 | 反爬严重 | 截图 |
-| Google Maps / Apple Maps 分享链接 | 链接本身含名称/坐标/Place ID | **纯规则解析，不走 LLM** |
-| 朋友发的文字 | 直接文本 | 直接走抽取 |
+### 2.3 地点匹配的数据源（US1 的核心）
 
-**结论**：截图 + 文字粘贴是**必须**支持的兜底路径，链接抓取是加分项。另外 **iOS Safari 不支持 Web Share Target**，纯 Web / PWA 无法接收系统分享 → 必须有原生 Share Extension，这直接否决了 Web-first 方案。
+| 数据源 | POI 质量（网红餐厅、咖啡店、展览） | 费用 | 前置条件 | 结论 |
+|--------|------|------|---------|------|
+| **Google Places API (New)** Text Search | 最好，中英文都行 | Pro SKU 每月 5,000 次免费，之后约 $32 / 1,000 次 | Google Cloud 项目 + **绑定账单卡**（即使只用免费额度也必须绑） | **默认** |
+| Apple Maps Server API | 好 | 每日免费额度大 | Apple Developer Program $99/年 | Phase 2 可选 |
+| Nominatim / Photon（OpenStreetMap） | 弱：新店、小店常没有，中文名差 | 免费，无 key | 遵守 1 次/秒的礼貌限速 | **无 Google 账单时的后备** |
+| Mapbox / HERE / Foursquare | 中等 | 有免费档 | 注册 + key | 备选，不默认 |
+| 高德 / 百度 | 中国大陆唯一可用 | 免费档 | 国内实名注册 | 仅当集合里有中国大陆城市（见 C-7） |
 
-### 2.4 LLM 抽取
-- Claude 官方 SDK 没有 Swift 版；iOS 直连只能裸 HTTP，而且 API key 要放进 App 二进制（不能分发给别人）。→ 推荐经由一个极小的 **Cloudflare Worker**（TypeScript SDK）。
-- 端侧替代：iOS 26+ **Foundation Models framework**（`@Generable` 引导生成，离线免费），但上下文约 4K token、仅支持 Apple Intelligence 机型，质量低于 Claude。作为可选 `Extractor` 实现。
+注意：Google Maps 在**中国大陆**的 POI 数据很弱。如果你的收藏包含国内城市，需要 Phase 2 接高德或百度。
+
+### 2.4 手机网页的限制
+- iPhone 上的网页收不到系统分享面板的内容（Safari 不支持 Web Share Target），所以输入只能手动，这正是本版的前提。
+- 定位需要 HTTPS 和用户授权；Vercel 默认 HTTPS。
+- 网页可以用 `navigator.share` 把地点链接分享到 iMessage 等（iOS Safari 支持）。
+- 添加到主屏后的 PWA 有独立的 cookie 存储：登录态要在主屏 App 里再登一次，正常现象。
+
+### 2.5 Playwright WebKit ≠ iOS Safari
+Playwright 的 WebKit 是桌面 WebKit 加 iPhone 视口与 UA 模拟，能验证布局、交互、JS 逻辑；**不能**验证 Apple Maps 唤起、添加到主屏、权限弹窗、安全区。那些必须用 Vercel 预览 URL 在真 iPhone 上看。
+
+### 2.6 为什么放弃 v0.1 的原生 iOS 方案
+Marc 决定：不走 Xcode、不付 Apple 开发者费、不经 App 审核，在云端开发、用 Playwright WebKit 模拟 iPhone；输入方式改为手动，因此原生分享扩展不再是必需。网页版的代价是没有系统分享接入、没有 Apple Place ID，收益是零安装、跨平台、随时可改。
 
 ---
 
 ## 3. 方案选型
 
-### 3.1 平台
+### 3.1 技术栈
 
-| 方案 | 优点 | 缺点 | 适合 |
-|------|------|------|------|
-| **A. iOS 原生**（SwiftUI + SwiftData + CloudKit + MapKit） | Share Extension、Place ID、Apple 地点卡片、App Intents、小组件全是一等公民；零服务器同步（iCloud）；隐私好；一个人能维护 | 仅 Apple 生态；以后要 Android/Web 得补后端重写同步层 | 自用 + 朋友（Apple 用户） |
-| B. 跨平台（Expo/React Native 或 Flutter）+ Supabase | 一套代码 iOS + Android；Web 复用后端 | iOS 分享扩展 / 地点卡片 / Place ID 需 native module，体验和维护成本高；从第一天就要维护后端和账号体系 | 一开始就确定要 Android |
-| C. Web / PWA | 零安装 | iOS 收不到系统分享（致命） | 只能当 Phase 2 的只读浏览/导出端 |
+| 层 | 选择 | 理由 / 备注 |
+|----|------|------------|
+| 框架 | **Next.js（App Router，当前稳定版）+ TypeScript + React** | 前后端一体，Route Handlers 放服务端逻辑；Vercel 原生支持 |
+| 样式 | Tailwind CSS | 手机优先，少写 CSS |
+| 地图 | **MapLibre GL JS + OpenFreeMap 免费矢量底图**（样式 URL 形如 `https://tiles.openfreemap.org/styles/liberty`，需核实） | 无 key、无账单；不在浏览器里用 Google Maps JS，避免 key 外泄与计费 |
+| 数据库 | **PostgreSQL**：生产用 Neon 免费档；开发 / E2E 用容器内本地 Postgres 16 | Drizzle ORM + `drizzle-kit` 迁移，迁移文件入库 |
+| 地点匹配 | `GeocodingProvider` 抽象；默认 `GooglePlacesProvider`，后备 `NominatimProvider` | key 只在服务端；结果缓存到 `search_cache` 表 |
+| 认证 | Phase 1：**单用户密码门**（`APP_PASSWORD` + 签名 cookie，`iron-session` 或 `jose`）；Phase 2：Auth.js + Google 登录 + 邮箱白名单 | Phase 1 零第三方配置，E2E 容易 |
+| 托管 | **Vercel Hobby**（GitHub 连接后自动部署；每个 PR 有预览 URL） | 预览 URL 就是 Marc 的真机验证入口 |
+| 测试 | Vitest（单元）；Playwright E2E：`iphone-webkit`（`devices['iPhone 15']`）+ `desktop-chromium` 两个 project | E2E 默认 mock `/api/search`，不消耗 Google 额度 |
+| 工具 | pnpm、ESLint、Prettier、GitHub Actions | |
 
-**推荐 A**。同时把三样东西做成平台无关、可搬走：① 领域模型（JSON schema 固定）；② 抽取服务（独立 TypeScript Worker，任何客户端都能调）；③ 导出格式（KML/CSV/GPX 在纯 Swift Package 里）。这样 Phase 2 若要 Android/Web，加后端同步 + 新客户端即可，核心不重写。
+备选说明：Supabase（Postgres + Auth 一体）或 Firebase 也可行；本文选 Neon + Drizzle 是为了 SQL 可控、迁移入库、Phase 2 换认证不换数据层。
 
-### 3.2 数据与同步
-**SwiftData + CloudKit（用户自己的 iCloud 私有数据库）**。零服务器、免费、iPhone/iPad/Mac 多设备同步。
+### 3.2 认证与多用户路径
+- Phase 1：所有数据表带 `owner_id text not null default 'owner'`。密码门通过后 cookie 里只记 `owner`。
+- Phase 2：接 Auth.js（Google 登录）+ `ALLOWED_EMAILS` 白名单，`owner_id` 改为用户邮箱或 uuid；数据迁移只需一条 `update ... set owner_id = …`。
+- 任何时候服务端查询都必须带 `owner_id` 过滤，不靠前端。
 
-注意事项（Opus 必须遵守）：
-- SwiftData + CloudKit **不支持 `@Attribute(.unique)`**，所有属性必须有默认值或为可选，所有关系必须是可选的。去重靠业务逻辑而非数据库约束。
-- CloudKit 生产环境 schema 只能加不能删/改类型，字段命名一次想清楚；开发期用 Development 环境随意改。
-- 需要付费 **Apple Developer Program（$99/年）**：CloudKit、App Group、TestFlight 都要它。
-- 共享集合（Phase 2）：SwiftData 对 `CKShare` 支持弱，到时评估 Core Data + `NSPersistentCloudKitContainer` 共享库，或改走 Supabase。
-
-### 3.3 抽取服务：`PlaceExtractor` 协议 + 三种实现
-```swift
-protocol PlaceExtractor {
-    func extract(_ input: ExtractionInput) async throws -> ExtractionResult
+### 3.3 `GeocodingProvider` 抽象
+```ts
+export interface GeocodingProvider {
+  readonly id: 'google' | 'nominatim' | 'apple';
+  search(q: SearchQuery): Promise<Candidate[]>;
 }
+export type SearchQuery = {
+  text: string;                                   // 用户输入原文
+  bias?: { lat: number; lng: number; radiusM: number }; // 集合城市中心
+  language: 'zh-CN' | 'en';
+  region?: string;                                // 'US' 等，可选
+  limit: number;                                  // ≤ 5
+};
+export type Candidate = {
+  provider: 'google' | 'nominatim' | 'apple';
+  providerPlaceId: string;
+  name: string;
+  formattedAddress: string;
+  lat: number; lng: number;
+  primaryType?: string;        // 原始类型
+  category: PlaceCategory;     // 映射后的本地分类
+  mapsUri?: string;            // Google 自带链接
+};
 ```
-1. `RuleBasedExtractor`：Google Maps / Apple Maps 分享链接 → 直接解析出名称/坐标/Place ID，零成本、零延迟。
-2. `ClaudeExtractor`（默认）：经 Worker 调 Claude，结构化输出。
-3. `OnDeviceExtractor`：Foundation Models（`#available(iOS 26)` 且 `SystemLanguageModel.default.availability == .available`），离线 / 用户关闭云端时使用。
-
-选择策略：链接可规则解析 → 1；否则有网且云端开启 → 2；否则设备支持 → 3；否则存为「待识别」草稿。
-
-### 3.4 后端：唯一的服务端组件是一个 Cloudflare Worker
-`worker/`（TypeScript，Hono 路由，`@anthropic-ai/sdk`，zod，vitest，wrangler）
-
-| 端点 | 作用 |
-|------|------|
-| `POST /v1/extract` | 输入文本（+ 可选截图 base64、城市提示）→ 结构化地点列表。内部调 Claude `messages.parse` + `zodOutputFormat` |
-| `POST /v1/unfurl` | 输入 URL → 服务端抓取（统一 UA、跟随短链跳转、oEmbed）→ `{finalUrl, title, text, author, siteName, imageUrls, kind, blocked}` |
-| `GET /healthz` | 健康检查 |
-
-- **鉴权**：Phase 1 用一个共享 Bearer token（App 端存 Keychain，Worker 端 `wrangler secret`）。Phase 2 换 Sign in with Apple → JWT + App Attest。
-- **限流**：按 token 60 次/分钟（KV 或 Durable Object）。
-- **缓存**：KV 按 `sha256(url)` 缓存 unfurl 结果 7 天；按 `sha256(text)` 缓存 extract 结果 30 天。
-- **费用**：Workers 免费档 10 万请求/天足够；Claude 费用见 6.6。
-- **隐私**：默认只上传 OCR 后的文本，不上传截图原图（见 D-12）。Worker 不落库任何用户内容（只有哈希缓存）。
+Google 调用形状（需核实字段掩码所属计费层级）：`POST https://places.googleapis.com/v1/places:searchText`，头 `X-Goog-Api-Key`、`X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType,places.googleMapsUri`，体 `{ textQuery, languageCode, locationBias: { circle: { center: { latitude, longitude }, radius } }, pageSize: 5 }`。只请求 Pro 层字段，不要请求评分、营业时间（会升到 Enterprise 计费层）。
 
 ---
 
 ## 4. 系统架构图
 
 ```
-┌───────────────────────────── iPhone ─────────────────────────────┐
-│  小红书 / Instagram / TikTok / 相册(截图) / Safari / 微信 …          │
-│                      │ 系统分享面板                                 │
-│                      ▼                                            │
-│  ┌──────────── Share Extension ────────────┐                      │
-│  │ 1. 读取 URL / 文本 / 图片                 │                      │
-│  │ 2. 立刻落盘 InboxItem（保证不丢）          │                      │
-│  │ 3. 链接规则解析 ─或─ Vision OCR ─或─ unfurl │                      │
-│  │ 4. 调抽取 → 地理编码 → 去重 → Review UI    │                      │
-│  └──────────────────┬──────────────────────┘                      │
-│                     ▼                                             │
-│       App Group 共享容器（同一个 SwiftData store）                   │
-│                     ▲                                             │
-│  ┌────────── 主 App (SwiftUI) ─────────────┐                      │
-│  │ 集合 · 列表 · 地图 · 详情 · 附近 · 导出 · 设置 │                      │
-│  │ Services: Geocoding(MKLocalSearch)      │                      │
-│  │   MapsLauncher · ExtractionClient · OCR  │                      │
-│  │   Unfurl · Exporter(KML/CSV/GPX) · Dedup │                      │
-│  │ App Intents(Siri/快捷指令) · Widgets      │                      │
-│  └───────┬───────────────────────┬─────────┘                      │
-│          │ 深链 / MKMapItem        │                                │
-│          ▼                       │                                │
-│   Apple Maps / Google Maps        │                                │
-└──────────────────────────────────┼────────────────────────────────┘
-          │ CloudKit 私有库同步       │ HTTPS + Bearer
-          ▼                        ▼
-   用户自己的 iCloud         Cloudflare Worker (TypeScript)
-                              ├─ POST /v1/extract ──▶ Claude API（结构化输出）
-                              ├─ POST /v1/unfurl  ──▶ 目标网页 / oEmbed
-                              └─ KV：缓存 + 限流
+ iPhone Safari / 桌面浏览器
+ ┌──────────────────────────────────────────────┐
+ │ Next.js 前端（PWA）                            │
+ │  集合 · 列表 · 地图(MapLibre+OpenFreeMap) · 添加 │
+ │  详情 · 导出 · 设置                             │
+ │  外跳：maps.apple.com / google.com/maps 深链     │
+ └───────────────┬──────────────────────────────┘
+                 │ HTTPS（同源 /api/*）
+ ┌───────────────▼──────────────────────────────┐
+ │ Next.js 服务端（Vercel）                        │
+ │  认证中间件（密码门 → Phase 2 Auth.js）          │
+ │  /api/search ──▶ GeocodingProvider ──▶ Google Places API (New)
+ │                      └─ search_cache 表（30 天） └─ Nominatim（后备）
+ │  /api/collections · /api/places · /api/mentions ──▶ Drizzle ──▶ PostgreSQL (Neon)
+ │  /api/export ──▶ KML / CSV / GPX 生成（纯函数）  │
+ └──────────────────────────────────────────────┘
+ 开发 / E2E：容器内本地 Postgres 16 + Playwright（WebKit iPhone / Chromium）
+ 真机验证：Vercel 预览 URL + iPhone Safari
 ```
 
 ---
 
-## 5. 领域模型
+## 5. 领域模型（PostgreSQL / Drizzle）
 
-### 5.1 实体（SwiftData，`App/Persistence/Models/`）
+```sql
+-- 枚举
+place_category: restaurant, cafe, bar, dessert, bakery, attraction, museum, park, viewpoint,
+                shopping, market, neighborhood, hotel, activity, other
+visit_status:   want_to_go, visited, skipped
+source_kind:    xiaohongshu, instagram, tiktok, youtube, dianping, wechat, friend, web, other
 
-```swift
-@Model final class Place {
-    var id: UUID = UUID()
-    var name: String = ""
-    var nameAlt: [String] = []            // 中英文别名，如 ["Katz's Delicatessen", "Katz's 熟食店"]
-    var latitude: Double = 0
-    var longitude: Double = 0
-    var formattedAddress: String?
-    var city: String = ""                 // 归属城市（用于分组与地理编码偏置）
-    var region: String?                   // 州/省
-    var countryCode: String?
-    var applePlaceID: String?             // MKMapItem.Identifier.rawValue（主去重键）
-    var googlePlaceID: String?            // Phase 2
-    var categoryRaw: String = "other"     // PlaceCategory 枚举的 rawValue
-    var tags: [String] = []
-    var statusRaw: String = "wantToGo"    // VisitStatus：wantToGo / visited / skipped
-    var priority: Int = 1                 // 0 随便 · 1 想去 · 2 必去
-    var userNote: String?
-    var createdAt: Date = Date()
-    var updatedAt: Date = Date()
-    var lastVerifiedAt: Date?             // 上次用 Place ID 刷新的时间
-    var collections: [Collection]? = []   // 多对多（CloudKit 要求可选）
-    @Relationship(deleteRule: .cascade, inverse: \Mention.place)
-    var mentions: [Mention]? = []
-}
+collections (
+  id uuid pk, owner_id text not null default 'owner',
+  name text not null,                 -- "纽约 2026 春假"
+  emoji text, color text,
+  city_name text, center_lat double precision, center_lng double precision,
+  bias_radius_m integer default 30000,
+  sort_order int default 0, archived boolean default false,
+  created_at timestamptz default now()
+)
 
-@Model final class Mention {               // 「某个来源推荐了这个地点」= 特殊说明的载体
-    var id: UUID = UUID()
-    var quote: String?                     // 为什么值得去（抽取出来的理由，原文语言）
-    var rawSnippet: String?                // 原文片段
-    var confidence: Double = 0
-    var createdAt: Date = Date()
-    var source: Source?
-    var place: Place?
-}
+places (
+  id uuid pk, owner_id text not null default 'owner',
+  name text not null, name_alt text[] default '{}',
+  lat double precision not null, lng double precision not null,
+  formatted_address text, city text, country_code text,
+  provider text,                      -- 'google' | 'nominatim' | 'manual'
+  provider_place_id text,             -- Google place id 等
+  matched boolean default true,       -- false = 用户手动放针
+  category place_category default 'other',
+  tags text[] default '{}',
+  status visit_status default 'want_to_go',
+  priority smallint default 1,        -- 0 随便 · 1 想去 · 2 必去
+  note text,                          -- 个人备注
+  created_at timestamptz default now(), updated_at timestamptz default now(),
+  unique (owner_id, provider, provider_place_id)  -- provider_place_id 为空时不参与（partial unique）
+)
 
-@Model final class Source {
-    var id: UUID = UUID()
-    var kindRaw: String = "text"           // SourceKind
-    var url: String?
-    var title: String?
-    var author: String?
-    var siteName: String?
-    var capturedAt: Date = Date()
-    var rawText: String?                   // OCR 或抓取到的正文
-    @Attribute(.externalStorage) var screenshot: Data?   // 可选保留截图
-    var extractionStatusRaw: String = "pending"           // pending / done / failed
-    @Relationship(deleteRule: .cascade, inverse: \Mention.source)
-    var mentions: [Mention]? = []
-}
+collection_places ( collection_id uuid, place_id uuid, added_at timestamptz, primary key (collection_id, place_id) )
 
-@Model final class Collection {            // 一般 = 一个城市 / 一次旅行
-    var id: UUID = UUID()
-    var name: String = ""                  // "纽约 2026 春假"
-    var emoji: String?
-    var colorHex: String?
-    var cityName: String?
-    var centerLatitude: Double?
-    var centerLongitude: Double?
-    var sortOrder: Int = 0
-    var isArchived: Bool = false
-    var createdAt: Date = Date()
-    var places: [Place]? = []
-}
+mentions (                             -- 「为什么值得去」+ 来源，一个地点可多条
+  id uuid pk, place_id uuid references places on delete cascade,
+  why text, source_kind source_kind default 'other', source_url text, source_title text,
+  created_at timestamptz default now()
+)
 
-@Model final class InboxItem {             // Share Extension 落盘的待处理队列
-    var id: UUID = UUID()
-    var url: String?
-    var text: String?
-    var imageFileNames: [String] = []      // 存 App Group 容器文件
-    var hintCity: String?
-    var receivedAt: Date = Date()
-    var statusRaw: String = "received"     // received / processing / needsReview / done / failed
-    var errorMessage: String?
-}
+search_cache ( key text pk, provider text, response jsonb, created_at timestamptz )  -- key = sha256(provider|normalized text|bias)
 ```
 
-枚举（放在 `PlaceCore`，纯 Swift）：
-- `PlaceCategory`: `restaurant, cafe, bar, dessert, bakery, attraction, museum, park, viewpoint, shopping, market, neighborhood, hotel, activity, other`
-- `SourceKind`: `xiaohongshu, instagram, tiktok, youtube, dianping, wechat, googleMaps, appleMaps, web, screenshot, text, manual`
-- `VisitStatus`: `wantToGo, visited, skipped`
-
-### 5.2 抽取输出 JSON Schema（Worker 与 App 共用，固定不变的契约）
-```json
-{
-  "detected_city": "New York",
-  "source_title": "纽约必吃 10 家",
-  "places": [
-    {
-      "name": "Katz's Delicatessen",
-      "name_alt": ["Katz's 熟食店"],
-      "category": "restaurant",
-      "city": "New York",
-      "address_hint": "205 E Houston St, Lower East Side",
-      "why": "百年犹太熟食店，Pastrami 三明治是招牌",
-      "confidence": 0.95
-    }
-  ]
-}
-```
-规则：`category` 只能取 5.1 的枚举；`why` 用原文语言、≤ 60 字；`address_hint` 填街道 / 路口 / 街区 / 商场等有助于地理编码的线索；菜名、人名、品牌（无具体门店）不算地点；同一地点只出现一次。
+索引：`places(owner_id, status)`、`places(owner_id, category)`、`collection_places(place_id)`、`search_cache(created_at)` 用于清理。
 
 ---
 
 ## 6. 关键流程
 
-### 6.1 US1 分享收藏（主流程）
+### 6.1 US1 添加并匹配（核心流程）
 ```
-用户在小红书点「分享」→ 选 PlaceBook
-Share Extension：
- 1. 从 NSItemProvider 读取：URL？文本？图片？（可同时多个）
- 2. 立即写入 InboxItem(status=received)            ← 任何后续失败都不丢数据
- 3. 若 URL 命中 RuleBasedExtractor（Google/Apple Maps 链接）→ 直接得到候选，跳到 6
- 4. 若图片 → Vision OCR → text
-    若社媒 URL → POST /v1/unfurl → text；抓取失败/被墙 → 提示「请截图或粘贴文字」
- 5. POST /v1/extract(text, hintCity=当前集合城市) → 候选地点 []
- 6. 每个候选 → MKLocalSearch（城市偏置）→ 坐标 / Place ID / 地址 → 与已有 Place 去重
- 7. Review UI：候选列表（名称 · 分类 · 理由 · 匹配到的地址 · 置信度）+ 小地图；
-    选集合（默认上次用的；检测到新城市则建议新建）；勾选；可改名重搜；可手动改匹配
- 8. 保存：新建 Place，或把 Mention 合并进已有 Place；InboxItem.status=done
-超时（≥ 20 秒）或离线：InboxItem.status=needsReview，提示「已保存，稍后在 App 内识别」；
-主 App 进前台时扫描 Inbox 继续处理。
+「添加」页（/c/[collectionId]/add，输入框自动聚焦）
+ 1. 用户输入文本：如 "Katz's"、"纽约 Lilia 意面"、"205 E Houston St"；可选填：备注、理由、来源链接、标签、优先级
+ 2. 前端防抖 400 ms、≥ 2 个字符，或按回车 → POST /api/search { text, collectionId, language }
+ 3. 服务端：
+    a. 归一化文本（去首尾空白、全角转半角、合并空格）
+    b. 偏置：集合有城市中心 → 以其为圆心、bias_radius_m 为半径；否则用该用户最近一次保存的坐标；都没有则无偏置
+    c. 查 search_cache；未命中 → GoogleProvider.search → 写缓存
+    d. 排序：Provider 原序 × 名称相似度（中英文归一化后 token 相似）× 距离衰减
+    e. 返回 ≤ 5 个候选 + 偏置信息
+ 4. 前端：候选卡片（名称、地址、分类标签、距城市中心距离）+ 小地图编号针；首个候选预选
+ 5. 用户点候选 → 「确认保存」→ POST /api/places { candidate, collectionId, note, why, sourceUrl, sourceKind, tags, priority }
+ 6. 服务端：按 (owner_id, provider, provider_place_id) 查重
+    - 不存在 → 建 places + collection_places + mentions（若填了理由/来源）→ 201
+    - 已存在 → 200 { existing: true, placeId } → 前端提示「已收藏过，已把新理由追加到它」（追加 mention，加入本集合）
+ 7. 前端 toast「已保存 ✓」，输入框清空并保持聚焦，方便连续添加；底部显示「刚添加的 N 个」
+ 没有合适候选 → 「都不是？手动放置」：地图上拖针或输入地址（Google Geocoding，Essentials 层）→ 保存时 matched=false、provider='manual'
 ```
+失败处理：Google 429/5xx → 自动用 Nominatim 后备并在候选上标「后备数据源」；无网 → 提示稍后再试，不丢用户已填文字（本地暂存在 `sessionStorage`）。
 
-Share Extension 工程要点：
-- `NSExtensionActivationRule`：支持 URL（≤1）、文本、图片（≤5）。
-- 扩展内存上限约 120 MB、不能长时间后台：图片先缩放到长边 ≤ 1600 px 再 OCR；网络请求总超时 20 秒。
-- 扩展与主 App 共用 **App Group 容器**里的同一个 SwiftData store（`ModelConfiguration(groupContainer:)`）。
-- 扩展无法可靠地打开主 App，保存后只显示结果，不要尝试跳转。
+### 6.2 US2 浏览
+- `/`：集合卡片（城市、数量、封面 emoji）；`/c/[id]`：列表 / 地图切换；筛选分类、状态、标签；排序最近添加 / 优先级 / 距离（有定位时）。
+- 地图：MapLibre，按分类着色的圆点针，去过的灰色，点针弹出卡片 → 进详情。≥ 100 个点时开聚合。
 
-### 6.2 US2 截图
-与 6.1 相同，第 4 步用 Vision：`VNRecognizeTextRequest`，`recognitionLevel = .accurate`，`recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US", "ja-JP"]`，`usesLanguageCorrection = true`。全部端侧完成。OCR 文本 < 40 个字符时，询问用户是否把截图原图发给云端识别（见 D-12）。
+### 6.3 US3 打开 / 导航（`src/lib/maps-links/`，纯函数 + 单测）
+| 动作 | 链接 |
+|------|------|
+| 在 Apple Maps 打开 | `https://maps.apple.com/?q=${enc(name)}&ll=${lat},${lng}` |
+| Apple Maps 导航 | `https://maps.apple.com/?daddr=${enc(name + ', ' + formattedAddress)}&dirflg=w` （`d` 驾车、`r` 公交）；无地址时 `daddr=${lat},${lng}` |
+| Google Maps 打开 | `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${googleId}`（无 id 省略该参数） |
+| Google Maps 导航 | `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${googleId}&travelmode=walking` |
+| 加入 Apple Maps 指南 | 同「在 Apple Maps 打开」，按钮下方一句说明：「打开后在地点卡片点『保存』」 |
+| 分享 | `navigator.share({ title, text, url })`，不支持时复制链接 |
 
-### 6.3 地理编码与去重（`App/Services/Geocoding`）
-```swift
-let request = MKLocalSearch.Request()
-request.naturalLanguageQuery = "\(place.name) \(place.addressHint ?? place.city)"
-request.region = cityRegion                 // 集合城市的包围盒
-request.regionPriority = .required          // iOS 18+
-request.resultTypes = [.pointOfInterest, .address]
-```
-- 候选打分 = 名称相似度（中英文归一化、去标点、token 集合相似）× 与城市中心距离衰减 × 分类匹配。
-- 最高分 ≥ 0.85 且领先第二名 ≥ 0.15 → 自动接受；否则 Review UI 让用户在前 3 个里选。
-- 保存 `MKMapItem.identifier?.rawValue` 到 `applePlaceID`，以及坐标、地址、电话、网址、`pointOfInterestCategory`、时区。
-- **去重**：`applePlaceID` 相同 → 同一地点；否则坐标距离 ≤ 50 m 且名称相似度 ≥ 0.8 → 视为同一地点。合并时只追加 Mention，这正是产品价值（「3 篇帖子都推荐了这里」）。
-- 营业时间 / 照片 / 评分：**不自己存**，用 Apple 地点卡片（`.mapItemDetailSheet`）展示，零成本。
+详情页主按钮按设置中的默认导航 App 显示，其余放次级菜单。Apple 的新式 `https://maps.apple.com/place?…` 与 `/directions?…` 链接（需核实）作为可选升级，先用上面的旧式参数，长期可用。
 
-> 需核实：WWDC25 引入了 `MKGeocodingRequest` / `MKReverseGeocodingRequest` 和 `MKMapItem(location:address:)`，并把 `CLGeocoder` / `MKPlacemark` 系初始化器标记弃用。最低 iOS 18 时旧 API 仍可用，以 Xcode 警告为准，用 `#available(iOS 26, *)` 分支。
+### 6.4 US4 导出（`src/lib/export/`，纯函数 + 单测）
+- KML：`Document → Folder(集合) → Placemark{ name, description(理由 + 来源 + 备注), Point, ExtendedData{ category, status, priority } }`；导出前校验 My Maps 限制。
+- CSV（My Maps 友好列）：`Name, Latitude, Longitude, Category, Status, Priority, Note, Why, Sources`。
+- GPX：waypoints。
+- 文字清单：每行 `名称 · 一句理由 · Apple Maps 链接`。
+- 页面内给「导入 Google My Maps」三步说明。
 
-### 6.4 US4 打开 / 导航（`App/Services/MapsLauncher`）
-```swift
-enum NavigationApp { case appleMaps, googleMaps }
-enum TravelMode { case walking, driving, transit }
+### 6.5 US6 附近（Phase 1.5）
+`navigator.geolocation.getCurrentPosition` → Haversine 距离 → 排序；半径筛选 1 / 3 / 10 km；地图定位到当前位置。
 
-// Apple Maps（优先原生，不依赖 URL 格式）
-let item: MKMapItem = try await resolveMapItem(place)   // 有 applePlaceID 用 MKMapItemRequest，否则用坐标构造
-item.name = place.name
-item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
-// 仅「打开查看」（之后用户可点 Apple Maps 里的「保存」加入指南）：
-item.openInMaps()
-
-// Google Maps（universal link，装了 App 就跳 App）
-var c = URLComponents(string: "https://www.google.com/maps/dir/")!
-c.queryItems = [
-  .init(name: "api", value: "1"),
-  .init(name: "destination", value: "\(lat),\(lng)"),
-  .init(name: "travelmode", value: "walking"),
-]
-// 有 googlePlaceID 时追加 destination_place_id
-```
-Apple Maps URL 备用形式（分享到 iMessage 等场景）：旧式 `https://maps.apple.com/?q=<名称>&ll=<lat>,<lng>` 长期可用；新式 `https://maps.apple.com/place?place-id=<id>`（iOS 18.x+，文档「Adopting unified Maps URLs」，**需核实**参数名）。
-
-### 6.5 US6 导出（`PlaceCore/Export`）
-- **KML**：`Document → Folder(每个集合) → Placemark{name, description(理由 + 来源链接 + 备注), Point, ExtendedData{category, status}}`。导出前校验 My Maps 限制（≤ 5 MB、≤ 2000 行）。
-- **CSV**（My Maps 友好列）：`Name, Latitude, Longitude, Category, Status, Note, Why, Sources`。
-- **GPX**：waypoints，给其他地图 App。
-- **文字清单**：每行 `名称 · 一句理由 · Apple Maps 链接`，方便发给朋友。
-- App 内提供「导入到 Google My Maps 的三步说明」。
-
-### 6.6 LLM 抽取细节（Worker）
-- **模型**：默认 `claude-opus-5-5`（对中文社媒文本的歧义、谐音、缩写处理最稳）。可选 `claude-haiku-5-5`（约便宜 30 倍），见 D-10。模型 ID 用字符串常量集中管理，不要散落。
-- **调用方式**（示意，实际以 `claude-api` skill 为准）：
-  ```ts
-  import Anthropic from "@anthropic-ai/sdk";
-  import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-
-  const res = await client.messages.parse({
-    model: MODEL_ID,
-    max_tokens: 4000,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: [ /* 可选 image block */ { type: "text", text: userText } ] }],
-    output_config: { format: zodOutputFormat(ExtractionSchema), effort: "medium" },
-  });
-  if (res.stop_reason === "refusal") { /* 返回空结果和友好提示 */ }
-  const parsed = res.parsed_output; // null → 422
-  ```
-  按 skill 指引启用 server-side refusal fallback；不要用 `tool_choice: any/tool` 强制工具（Opus 5.5 已不支持）；不要写 `budget_tokens`。
-- **提示词要点**（`worker/src/prompts/extract.md`）：只抽「可以导航前往的具体地点」；菜名/人名/无门店的品牌不算；同名连锁保留文中提到的具体分店线索；`why` 用原文语言、简短、来自原文；给出整体城市；输出严格遵守 schema。附 3–5 个 few-shot（小红书多店清单、Instagram 单店、含英文店名的中文帖、Google Maps 链接伴随文字、无地点的噪声文本）。
-- **图片输入**：截图 base64（长边缩放到 ≤ 1568 px、JPEG 质量 0.8）作为 image block；仅在 OCR 文本过短或用户选择时上传。
-- **成本估算**（每次收藏：输入 2–4K token，输出 0.5–1K token）：
-
-  | 模型 | 单次 | 每月 150 次 |
-  |------|------|-----------|
-  | Opus 5.5（$4 / $20 每 M token） | ≈ $0.02–0.04 | ≈ $3–6 |
-  | Haiku 5.5（$0.10 / $0.50 每 M token） | ≈ $0.001 | ≈ $0.15 |
-
-- **回归评测集**：`worker/eval/cases/*.json`，30–50 条真实帖子文本（脱敏）→ 期望地点列表。vitest 默认 mock；设置 `RUN_LIVE_EVAL=1` 才真调 API。改提示词必须跑一遍。
+### 6.6 Phase 2：粘贴整段文字 → 抽取多个地点（可选）
+服务端 Route Handler 调 Claude（模型 ID 集中常量，默认 `claude-opus-5-5`；结构化输出；按 `claude-api` skill 写），把一段小红书文案拆成 `[{ name, city, why, confidence }]`，每一条再走 6.1 的第 2–6 步。Phase 1 不做。
 
 ---
 
-## 7. 仓库结构与模块边界
+## 7. 仓库结构
 
 ```
 /
-├── CLAUDE.md                     # 项目规则（含 Git 署名硬规则），首个 commit 就要有
+├── CLAUDE.md                        # 项目规则（含 Git 署名硬规则）
 ├── README.md
-├── docs/
-│   ├── ARCHITECTURE.md           # 本文档
-│   └── DECISIONS.md              # Marc 的决策回答（第 10 节的填空版）
-├── project.yml                   # XcodeGen 工程定义 → 生成 PlaceBook.xcodeproj（.xcodeproj 不入库）
-├── .swiftlint.yml  .swiftformat
-├── App/                          # iOS 主 App（SwiftUI，iOS 18+）
-│   ├── App/                      # 入口、依赖注入、环境
-│   ├── Features/
-│   │   ├── Collections/          # 集合列表 / 新建 / 归档
-│   │   ├── Places/               # 列表 + 筛选
-│   │   ├── Map/                  # 地图（MapKit SwiftUI Map、分类着色、选择卡片）
-│   │   ├── PlaceDetail/          # 详情：理由、来源、备注、状态、导航按钮、Apple 地点卡片
-│   │   ├── Capture/              # Inbox 处理与 Review UI（与扩展共用视图）
-│   │   ├── Nearby/
-│   │   ├── Export/
-│   │   └── Settings/
-│   ├── Services/
-│   │   ├── Geocoding/            # MKLocalSearch 封装、候选打分
-│   │   ├── MapsLauncher/         # Apple/Google 跳转
-│   │   ├── Extraction/           # PlaceExtractor 协议 + Rule/Claude/OnDevice 三实现
-│   │   ├── OCR/                  # Vision
-│   │   ├── Unfurl/               # 调 Worker
-│   │   └── Dedup/
-│   ├── Persistence/              # SwiftData 模型、ModelContainer(App Group + CloudKit)、迁移
-│   └── Resources/                # Assets、Localizable.xcstrings（zh-Hans / en）
-├── ShareExtension/               # 分享扩展（薄：读取 → 落盘 → 复用 Capture 视图）
-├── Intents/                      # App Intents：导航到收藏、附近收藏、从文字保存
-├── Widgets/                      # Phase 1.5
-├── Packages/
-│   └── PlaceCore/                # 纯 Swift Package，Linux 可 `swift test`
-│       ├── Sources/PlaceCore/
-│       │   ├── Models/           # 枚举、DTO、ExtractionResult（与 Worker schema 一致）
-│       │   ├── LinkParsing/      # Google/Apple Maps 分享链接解析、短链识别、来源 kind 判定
-│       │   ├── Matching/         # 名称归一化、相似度、候选打分、去重判定
-│       │   ├── Export/           # KML / CSV / GPX 生成与限制校验
-│       │   └── Text/             # OCR 文本清洗、长度/语言检测
-│       └── Tests/PlaceCoreTests/
-├── worker/                       # Cloudflare Worker（TypeScript）
-│   ├── src/
-│   │   ├── index.ts              # Hono 路由、鉴权、限流
-│   │   ├── extract.ts            # Claude 调用 + zod schema
-│   │   ├── unfurl/               # 通用抓取 + 各站点适配（xiaohongshu.ts, youtube.ts, tiktok.ts, wechat.ts…）
-│   │   ├── prompts/extract.md
-│   │   └── schema.ts             # 与 PlaceCore/Models 对应的 JSON schema（唯一事实来源之一）
-│   ├── eval/                     # 回归评测集
-│   ├── test/                     # vitest
-│   └── wrangler.toml
-└── .github/workflows/ci.yml      # ubuntu: swift test (PlaceCore) + pnpm test (worker)；macOS job 可选/手动
+├── docs/ARCHITECTURE.md  docs/DECISIONS.md
+├── package.json  pnpm-lock.yaml  next.config.ts  tsconfig.json  tailwind.config.ts
+├── .eslintrc / eslint.config.js  .prettierrc  .env.example  .gitignore
+├── drizzle.config.ts
+├── drizzle/                         # 迁移 SQL（入库）
+├── playwright.config.ts             # projects: iphone-webkit, desktop-chromium
+├── vitest.config.ts
+├── scripts/
+│   ├── dev-db.sh                    # 容器内启动/停止本地 Postgres 16（initdb → pg_ctl）
+│   └── shot.ts                      # 用 iPhone 视口截图指定页面，给 Marc 看
+├── public/                          # manifest.webmanifest、图标
+├── src/
+│   ├── app/
+│   │   ├── (auth)/login/            # 密码门
+│   │   ├── page.tsx                 # 集合列表
+│   │   ├── c/[id]/page.tsx          # 列表 + 地图
+│   │   ├── c/[id]/add/page.tsx      # 添加并匹配（US1）
+│   │   ├── c/[id]/export/page.tsx
+│   │   ├── p/[id]/page.tsx          # 地点详情
+│   │   ├── nearby/page.tsx          # Phase 1.5
+│   │   ├── settings/page.tsx
+│   │   └── api/{search,places,collections,mentions,export}/route.ts
+│   ├── components/                  # Map、CandidateList、PlaceCard、Filters、Toast …
+│   ├── lib/
+│   │   ├── geocoding/               # provider.ts、google.ts、nominatim.ts、cache.ts、rank.ts
+│   │   ├── maps-links/              # apple.ts、google.ts（纯函数）
+│   │   ├── export/                  # kml.ts、csv.ts、gpx.ts、text.ts
+│   │   ├── matching/                # normalize.ts、similarity.ts、dedup.ts、category-map.ts
+│   │   ├── db/                      # schema.ts、client.ts、queries/
+│   │   ├── auth/                    # session.ts、middleware 辅助
+│   │   └── i18n/                    # zh-CN / en 文案
+│   └── middleware.ts                # 未登录 → /login
+├── tests/
+│   ├── unit/                        # vitest：maps-links、export、matching、geocoding(用 Google 响应 fixture)、db(本地 Postgres)
+│   ├── e2e/                         # playwright：登录 → 建集合 → 添加(mock /api/search) → 确认 → 列表/地图 → 详情链接 href → 导出
+│   └── fixtures/google/*.json       # 真实格式的 Google 响应样本（脱敏）
+└── .github/workflows/ci.yml
 ```
 
-依赖方向：`App → PlaceCore`；`ShareExtension → PlaceCore + App 的 Capture 视图（通过共享 framework target 或直接编译同一批源文件）`；`worker` 独立。App 层不直接 import Anthropic SDK。
+依赖方向：`app → components → lib`；`lib/*` 之间只允许依赖 `lib/db` 与 `lib/matching`；`maps-links`、`export`、`matching` 必须是无 IO 的纯函数，单测覆盖。
 
 ---
 
-## 8. 技术栈与版本
+## 8. 开发、测试与部署
 
-| 层 | 选择 | 备注 |
-|----|------|------|
-| 最低系统 | iOS 18.0 | Place ID、`.mapItemDetailSheet`、`regionPriority` 都是 iOS 18 起；端侧模型用 `#available(iOS 26)` |
-| 语言/UI | Swift 6（严格并发可先 minimal）、SwiftUI | |
-| 数据 | SwiftData + CloudKit 私有库，App Group 共享容器 | 约束见 3.2 |
-| 地图 | MapKit（SwiftUI `Map`、`MKLocalSearch`、`MKMapItemRequest`） | 不引入 Google Maps SDK |
-| OCR | Vision | 端侧 |
-| 端侧 LLM | Foundation Models（可选） | iOS 26+ |
-| 工程 | XcodeGen、SwiftLint、SwiftFormat | |
-| 后端 | Cloudflare Workers、Hono、`@anthropic-ai/sdk`、zod、vitest、wrangler、pnpm | |
-| CI | GitHub Actions：ubuntu 跑 `swift test` + `pnpm test`；`macos-15` 跑 `xcodebuild` 作为手动/可选 job（macOS 分钟贵） | |
+### 8.1 命令（`package.json` scripts）
+| 命令 | 作用 |
+|------|------|
+| `pnpm db:start` / `pnpm db:stop` | 容器内本地 Postgres（`scripts/dev-db.sh`），数据目录 `.pgdata/`（gitignore） |
+| `pnpm db:migrate` | `drizzle-kit migrate` |
+| `pnpm dev` | Next.js 开发服务器 |
+| `pnpm lint` / `pnpm typecheck` | ESLint / `tsc --noEmit` |
+| `pnpm test` | Vitest 单元测试 |
+| `pnpm e2e` | Playwright 两个 project；`pnpm e2e:webkit` 只跑 iPhone WebKit |
+| `pnpm shot <path>` | 用 iPhone 15 视口截图页面到 `artifacts/`，发给 Marc |
+
+### 8.2 测试策略
+- **单元**：深链构造、KML/CSV/GPX、名称归一化与相似度、去重、分类映射、Google 响应解析（fixtures）。数据层测试连本地 Postgres。
+- **E2E**：`page.route('**/api/search', …)` 返回 fixtures，不消耗 Google 额度、不需要 key；覆盖 US1–US3 全流程；断言详情页按钮 `href` 精确等于 6.3 的格式。
+- **真调**：`RUN_LIVE=1 pnpm test:live` 才真的调 Google（需 key 与网络放行），手动触发。
+- **真机**：每个 PR 的 Vercel 预览 URL，Marc 用 iPhone 验证 Apple Maps 唤起、PWA、定位。
+
+### 8.3 CI（GitHub Actions，`ubuntu-latest`）
+`pnpm install` → lint → typecheck → unit（`services: postgres:16`）→ `pnpm build` → `npx playwright install --with-deps webkit chromium` → e2e。CI 里 WebKit 可正常下载，不受云端会话的网络策略影响。
+
+### 8.4 部署（Vercel）
+1. Marc 在 Vercel 用 GitHub 登录，Import 本仓库（Hobby 免费）。
+2. 环境变量：`DATABASE_URL`（Neon）、`GOOGLE_MAPS_API_KEY`（仅服务端）、`APP_PASSWORD`、`SESSION_SECRET`、`GEOCODING_PROVIDER=google|nominatim`。
+3. `main` → 生产；PR → 预览 URL。
+4. Neon：在 Vercel Marketplace 一键创建，或在 neon.tech 建项目后把连接串填进 `DATABASE_URL`；`pnpm db:migrate` 在部署前由 Opus 对生产库执行一次（需放行 Neon 域名），或在 Vercel build 命令里执行。
+
+### 8.5 Marc 需要自己做的外部配置（Opus 做不了）
+| 事项 | 步骤 | 何时 |
+|------|------|------|
+| 云端环境网络放行 | 云端环境设置 → Edit → Allowed domains 加：`playwright.download.prss.microsoft.com`（WebKit）、`places.googleapis.com`（真调）、你的 Neon 主机名（形如 `*.neon.tech`）、`archive.ubuntu.com` 与 `security.ubuntu.com`（WebKit 系统库，若需要） | Phase 0 |
+| Google Cloud | 建项目 → 启用 **Places API (New)**（可选 Geocoding API）→ 绑定账单 → 建 API key，限制只能调这两个 API → 把 key 给 Opus 放进 Vercel 环境变量与本地 `.env.local`（不入库） | Phase 1 |
+| Vercel + Neon | 见 8.4 | Phase 0 末 |
+| GitHub 仓库改名 | Settings → General → Repository name | 开工前 |
 
 ---
 
-## 9. 分阶段路线图与验收
+## 9. 路线图与验收
 
-### Phase 0 — 骨架（目标：1 周内）
-- [ ] `CLAUDE.md`、`README.md`、`docs/`、`.gitignore`（排除 `.xcodeproj`、`DerivedData`、`.wrangler`、`node_modules`）
-- [ ] `project.yml` 能生成工程；App / ShareExtension / Intents 三个 target 空壳可编译
-- [ ] `PlaceCore` 包：枚举、DTO、链接解析（Google/Apple Maps）、KML 导出，单测通过（Linux）
-- [ ] SwiftData 模型 + App Group + CloudKit 容器配置；能在模拟器创建一条 Place
-- [ ] Worker：`/healthz`、`/v1/extract`（mock 与真调两种测试）、`/v1/unfurl`（通用 og 抓取）
-- [ ] CI 绿
-- **DoD**：Marc 在 Mac 上 `xcodegen generate && xcodebuild build` 成功；`swift test`、`pnpm test` 通过。
+### Phase 0 — 骨架
+- [ ] Next.js + TS + Tailwind + ESLint/Prettier；`CLAUDE.md`、`README.md`、`.env.example`、`.gitignore`
+- [ ] Drizzle schema（第 5 节）+ 首个迁移；`scripts/dev-db.sh` 在容器内起库并迁移成功
+- [ ] 密码门登录 + 中间件
+- [ ] `GeocodingProvider` 接口 + `GooglePlacesProvider`（用 fixtures 单测）+ `NominatimProvider`
+- [ ] `maps-links`、`export` 纯函数 + 单测
+- [ ] Playwright 配置（WebKit 装不上则先 Chromium）+ 一条登录 E2E；`pnpm shot` 可用
+- [ ] CI 绿；Marc 完成 Vercel 连接，首个预览 URL 能打开登录页
+- **DoD**：四条命令全绿；Marc 在 iPhone 上打开预览 URL 能登录。
 
-### Phase 1 — MVP（US1 / US3 / US4 + 手动添加）
-- [ ] Share Extension：接收 URL/文本 → 落盘 → 规则解析或 unfurl+extract → 地理编码 → Review UI → 保存
-- [ ] 集合 / 列表 / 地图 / 详情（含 Apple 地点卡片、来源与理由、状态与优先级、备注）
-- [ ] 导航与打开（Apple Maps 原生、Google Maps 深链、默认导航 App 设置）
-- [ ] 手动添加地点（搜索 MKLocalSearch）与粘贴文字识别
-- [ ] iCloud 同步可用；Inbox 失败重试
-- **DoD**：从小红书分享一篇「纽约 10 家店」的帖子，≤ 3 次点击保存 ≥ 8 家且位置正确；详情页一键跳 Apple Maps 导航。
+### Phase 1 — MVP（US1 / US2 / US3）
+- [ ] 集合：新建 / 编辑 / 归档，城市中心自动从城市名地理编码
+- [ ] 添加并匹配全流程（6.1），含查重追加、手动放针、连续添加
+- [ ] 列表 + 地图 + 筛选 + 排序
+- [ ] 详情页：状态 / 优先级 / 备注 / 理由与来源 / 标签；Apple Maps 打开与导航、Google Maps；设置默认导航 App
+- [ ] 中英文文案
+- **DoD**：Marc 在 iPhone 上 60 秒内添加 5 家纽约餐厅且位置正确；详情页点「Apple Maps 导航」唤起 Apple Maps。
 
-### Phase 1.5 — 补全（US2 / US5 / US6）
-- [ ] 截图 OCR 路径；OCR 过短时的上传询问
-- [ ] 附近（定位、距离、半径筛选）
-- [ ] KML / CSV / GPX / 文字清单导出 + My Maps 导入指引
-- [ ] App Intents：「导航去我收藏的 X」「附近有什么我收藏的」「把剪贴板文字存到 PlaceBook」
-- [ ] 小组件：附近已收藏（锁屏 / 主屏）
-- [ ] 端侧 `OnDeviceExtractor`（iOS 26+ 设备）
-- [ ] TestFlight 内测给朋友
+### Phase 1.5 — 补全（US4 / US5 / US6）
+- [ ] KML / CSV / GPX / 文字清单导出 + My Maps 指引
+- [ ] PWA：manifest、图标、Service Worker 缓存只读列表
+- [ ] 附近
+- [ ] 搜索缓存清理任务；输入历史
 
-### Phase 2 — 多人与扩展（需 Marc 再决策）
-- 共享集合（CloudKit Sharing 或 Supabase）、Web 只读页、Google Places 富化（营业时间/评分，需 Google Cloud 账单）、从 Google Takeout CSV 导入已保存地点、Android（若需要则按 3.1 方案 B 评估）。
+### Phase 2 — 需 Marc 再决策
+- Auth.js + Google 登录 + 白名单，集合只读分享链接；粘贴整段文字 → LLM 抽取多地点；高德 / 百度 provider（国内城市）；Apple Maps Server API provider（若付费）；从 Google Takeout 导入已保存地点。
 
 ---
 
 ## 10. 待 Marc 决定的问题清单（每项都有默认值；不回答即按默认执行）
 
-回答方式：直接在聊天里按编号回答，或把答案填进 `docs/DECISIONS.md`。
-
 ### A. 目标与范围
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| A-1 | 初期用户是谁？ | 决定要不要后端账号体系、Android | ① 只有我 ② 我 + 朋友（都是 iPhone）③ 公开上架 ④ 需要 Android | ② |
-| A-2 | 什么时候想用上第一版？ | 决定 Phase 1 范围 | 自由回答 | 尽快出 Phase 1，其他后置 |
+| A-1 | 初期用户是谁？ | 决定要不要账号体系 | ① 只有我 ② 我 + 几个朋友 ③ 公开 | ①（密码门），朋友用时再上 Phase 2 登录 |
+| A-2 | 什么时候想用上第一版？ | 决定 Phase 1 范围 | 自由回答 | 尽快出 Phase 1 |
 
-### B. 平台与开发环境
+### B. 外部服务（都要你自己注册，Opus 做不了）
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| B-3 | 你有 Mac + Xcode 吗？是否愿意付 Apple Developer Program（$99/年）？ | 没有 Mac 无法编译；没有付费账号就没有 CloudKit / App Group / TestFlight | 有/没有；愿意/不愿意 | 有 Mac，愿意付 |
-| B-4 | Opus 跑在哪？ | 决定谁来编译验证 | ① Claude Code 云端（Linux，只能跑 PlaceCore/worker 测试）② 我 Mac 本地的 Claude Code（可全量编译） | **已决定：②**（本地）。若临时改用 ① 则你负责在 Mac 上编译并把报错贴回 |
-| B-5 | 最低 iOS 版本 | iOS 18 有 Place ID 和地点卡片；iOS 26 才有端侧模型和新 MapKit API | iOS 18 / iOS 26 | iOS 18，端侧功能 `#available(iOS 26)` |
+| B-3 | 愿意开 Google Cloud 并绑定账单卡以使用 Places API 吗？（个人用量在免费额度内，账单通常为 0） | 决定匹配质量 | ① 愿意 ② 不愿意，用免费 OpenStreetMap 数据（新店、小店常匹配不到） | ① |
+| B-4 | 托管平台 | 部署与预览 URL | ① Vercel ② Cloudflare Pages ③ 其他 | ① |
+| B-5 | 数据库 | 生产持久化 | ① Neon ② Supabase ③ 其他 | ① |
+| B-6 | Phase 1 登录方式 | 零配置 vs 多人 | ① 单一密码 ② 直接 Google 登录 | ① |
 
-### C. 输入来源
+### C. 添加与匹配体验
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| C-6 | 你最常从哪些 App 看到地点？按频率排序 | 决定 unfurl 适配器开发顺序 | 小红书 / Instagram / TikTok / YouTube / 大众点评 / 微信 / Google Maps 分享 / 朋友发的文字 / 其他 | 小红书 → Instagram → Google Maps 链接 → 微信 → YouTube |
-| C-7 | 接受「截图 → OCR」作为主路径之一？ | 很多 App 链接抓不到内容，截图是兜底 | 是/否 | 是 |
-| C-8 | 一篇帖子有多个地点时，默认全选还是让你逐个勾？ | Review UI 交互 | ① 全部预选 ② 只预选高置信度 ③ 全不选 | ② |
+| C-7 | 你的收藏主要在哪些国家 / 城市？是否包含中国大陆城市？ | Google 在中国大陆数据很弱，需另接高德/百度 | 自由回答 | 美国为主；不含中国大陆 |
+| C-8 | 输入语言 | 影响搜索语言参数与候选显示 | 中文为主 / 英文为主 / 混合 | 混合，按浏览器语言 |
+| C-9 | 没有合适候选时允许「手动放针」吗？ | 保证总能存下来 | 是 / 否 | 是 |
+| C-10 | 同一地点重复添加时 | 查重策略 | ① 追加理由并提示 ② 直接拒绝 | ① |
+| C-11 | 添加时除名称外还想顺手填什么？ | 表单字段 | 备注 / 理由 / 来源链接 / 标签 / 优先级（多选） | 全部可选，只有名称必填 |
 
-### D. LLM 与后端
+### D. 地图跳转与导出
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| D-9 | 接受使用 Claude API 付费（约每次收藏 $0.02–0.04）吗？是否已有 Anthropic API key？ | 没有则只能端侧模型（iOS 26 + 新机型）或纯规则 | 是/否；有/没有 | 是；没有则去 console.anthropic.com 创建 |
-| D-10 | 抽取用哪个模型？ | 质量 vs 成本 | ① Opus 5.5（质量优先）② Haiku 5.5（约便宜 30 倍）③ 先 Opus，评测集跑通后再比较 | ① |
-| D-11 | 接受注册 Cloudflare 账号并部署一个 Worker（免费档）作为唯一后端？ | 不想要后端就只能把 key 放进 App，仅限自用、不能给别人 | ① Worker ② 零后端（key 放 Keychain，自用） | ① |
-| D-12 | 截图是否允许上传给云端模型？ | 隐私与成本 | ① 只传 OCR 文本 ② OCR 太短时询问 ③ 总是传原图 | ② |
+| D-12 | 默认导航 App | 详情页主按钮 | Apple Maps / Google Maps | Apple Maps，设置里可改 |
+| D-13 | 需要 Google Maps 按钮吗 | 免费，仅多一个按钮 | 要 / 不要 | 要 |
+| D-14 | KML 导出到 Google My Maps 放哪个阶段 | 范围 | Phase 1 / 1.5 / 不要 | 1.5 |
 
-### E. 地图
+### E. 手机体验与功能优先级
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| E-13 | Phase 1 只做 Apple Maps 原生 + Google Maps 深链（都不需要 key）；Google Places 富化（营业时间/评分，要 Google Cloud 账单）放 Phase 2，可以吗？ | 控制范围与成本 | 可以/不可以 | 可以 |
-| E-14 | 「加入 Apple Maps 指南」只能做成「一键打开 → 你手动点保存」，接受吗？ | 没有 API，这是事实约束 | 接受（唯一选项）/ 有其他想法 | 接受 |
-| E-15 | 需要 KML 导出 → Google My Maps 吗？ | 让地点以图层出现在 Google Maps 里 | Phase 1 / Phase 1.5 / 不需要 | Phase 1.5 |
-| E-16 | 默认导航 App | 详情页主按钮 | Apple Maps / Google Maps / 每次问 | Apple Maps，设置里可改 |
+| E-15 | PWA 添加到主屏 | 像 App 一样用 | Phase 1 / 1.5 / 不要 | 1.5 |
+| E-16 | 附近功能 | 需要定位权限 | Phase 1 / 1.5 / 不要 | 1.5 |
+| E-17 | Phase 2 的「粘贴整段文字自动抽取」要不要规划 | 需 Claude API 付费 | 要 / 先不要 | 先不要 |
 
-### F. 数据与体验
+### F. 外观与命名
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| F-17 | 需要 iCloud 多设备同步吗？ | 决定是否开 CloudKit | 是/否 | 是 |
-| F-18 | 界面语言 | 本地化范围 | 中文 / 英文 / 跟随系统（中英双语） | 跟随系统，首发 zh-Hans + en |
-| F-19 | App 名称与 Bundle ID（反向域名，如 `com.yourname.placebook`）；是否保留截图原图 | 工程配置；存储占用 | 自由回答 | 名称 PlaceBook（占位）；Bundle ID 用 `com.placeholder.placebook` 占位等你改；默认保留截图 |
+| F-18 | 界面语言；产品名称 | 文案与标题 | 中文 / 英文 / 双语；名称自由回答 | 中文为主、英文备用；名称 PlaceBook（占位） |
 
-### G. 功能优先级
+### G. Git / GitHub
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
-| G-20 | 下列功能哪些必须进 Phase 1（多选）：状态(想去/去过) · 优先级 · 个人备注 · 按集合分组 · 地图分类着色 · 附近 · 营业时间(用 Apple 卡片) · 照片 · 按天行程 · 好友共享 · Siri · 小组件 | 控制 MVP 范围 | 多选 | 前 7 项进 Phase 1；附近、Siri、小组件 Phase 1.5；行程、共享 Phase 2 |
-
-### H. Git / GitHub
-| # | 问题 | 为什么重要 | 选项 | 默认 |
-|---|------|-----------|------|------|
-| H-21 | commit 用的姓名与邮箱（需与 GitHub 账号匹配，否则头像不会关联） | 第 0.2 节硬规则需要具体值 | 自由回答 | 必填，无默认 |
-| H-22 | 分支策略 | 协作与回滚 | ① 直推 main ② 功能分支 + PR 自己合 | ② |
-| H-23 | 仓库公开/私有；许可证 | 开源与否 | 私有 / 公开 + MIT | 私有，不加 LICENSE |
+| G-19 | **commit 用的姓名与邮箱**（邮箱需绑定到 GitHub 账号，否则不关联头像） | 第 0.2 节硬规则需要具体值 | 自由回答 | **必填，无默认** |
+| G-20 | 分支策略 | 协作与回滚 | ① 直推 main ② 功能分支 + PR 自己合 | ② |
+| G-21 | 仓库公开 / 私有；许可证 | 开源与否 | 私有 / 公开 + MIT | 私有，不加 LICENSE |
 
 ---
 
@@ -576,59 +459,59 @@ Apple Maps URL 备用形式（分享到 iMessage 等场景）：旧式 `https://
 
 | 风险 | 缓解 |
 |------|------|
-| 小红书等站点抓取随时失效 | 适配器独立文件、有 mock 测试；失败时清晰引导用户截图；截图路径永远可用 |
-| 同名店多分店、中英文名不一致导致地理编码错 | 城市偏置 + `address_hint` + 候选打分 + 低置信度交给用户选；保存后可「重新匹配」 |
-| Share Extension 内存 / 时间限制导致崩溃 | 图片缩放、20 秒超时、先落盘再处理、失败回主 App 续做 |
-| API key 泄露 | key 只在 Worker；App 端只有可轮换的 Bearer token |
-| SwiftData + CloudKit 的限制（无 unique、关系必须可选、schema 只增不改） | 3.2 的约束写进 `CLAUDE.md`；开发期用 Development 环境 |
-| Foundation Models 仅部分机型可用、上下文 4K | 仅作为可选实现；长文分块；不可用时静默回退云端或草稿 |
-| Apple 审核 / 隐私标签 | 提供隐私政策页；App Privacy 填「用户内容（文本/截图）用于 App 功能，不用于追踪」 |
-| Opus 跑在 Linux 无法编译 iOS | PlaceCore 承担尽量多逻辑并在 Linux 测；App 层由 Marc 编译回传报错 |
+| Google 账单意外 | 只请求 Pro 层字段；`search_cache` 30 天；在 Google Cloud 设每日配额上限（如 300 次/天）与预算告警；E2E 全 mock |
+| 同名店多分店、中英文名不一致 | 城市偏置 + 候选排序 + 用户确认 + 「重新匹配」入口 |
+| Apple Maps 链接定位到错误 POI | 用「名称 + 坐标」双条件；真机抽查餐厅 / 公园 / 商场三类；提供「Google Maps」作第二入口 |
+| WebKit 在云端装不上 | E2E 先跑 Chromium iPhone 视口，CI 里 WebKit 正常；真机走 Vercel 预览 |
+| 密码门被爆破 | 登录限速（每 IP 每分钟 5 次）、长随机密码、cookie `HttpOnly + Secure + SameSite=Lax` |
+| 中国大陆城市匹配差 | C-7 决定是否 Phase 2 接高德 / 百度 |
+| Neon 免费档自动休眠导致首次请求慢 | 可接受；或开启 Vercel cron 保活（可选） |
 
 ---
 
 ## 12. 附录
 
 ### A. 深链速查
-| 目的 | Apple Maps | Google Maps |
-|------|-----------|-------------|
-| 查看地点 | `MKMapItem.openInMaps()`；URL `https://maps.apple.com/?q=<name>&ll=<lat>,<lng>`；新式 `https://maps.apple.com/place?place-id=<id>`（需核实） | `https://www.google.com/maps/search/?api=1&query=<lat>,<lng>&query_place_id=<id>` |
-| 导航 | `openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: Driving/Walking/Transit])`；URL `?daddr=<lat>,<lng>&dirflg=d/w/r` | `https://www.google.com/maps/dir/?api=1&destination=<lat>,<lng>&travelmode=driving/walking/transit` |
-| 解析分享链接 | `maps.apple.com/?…ll=…&q=…`、`maps.apple.com/place?place-id=…`、短链 `maps.apple/p/…`（跟随跳转） | `maps.app.goo.gl/…` → 跟随跳转 → `/maps/place/<name>/@<lat>,<lng>,…` |
+见 6.3 表。实现为纯函数并单测，E2E 断言 `href`。
 
-### B. 给 Opus 的开场提示词（Marc 复制即用）
+### B. Google Cloud 配置步骤（Marc 自己做）
+1. console.cloud.google.com → 新建项目（如 `placebook`）。
+2. 「API 和服务 → 库」启用 **Places API (New)**；可选启用 **Geocoding API**。
+3. 「结算」绑定信用卡（免费额度内不扣费）。
+4. 「凭据」→ 创建 API 密钥 → 「API 限制」只勾选上面两个 API；不要加 HTTP 引用来源限制（服务端调用）。
+5. 「配额」把 Text Search 每日上限设为 300 左右；「预算和提醒」设 $1 告警。
+6. 把 key 发给 Opus（只放 `.env.local` 和 Vercel 环境变量，不入库）。
 
-在 Mac 终端里先 `cd` 到你想放项目的目录（例如 `~/code`），启动 Claude Code 后把下面整段粘进去：
-
+### C. 给 Opus 的开场提示词（Marc 复制即用，在 Claude Code 云端新窗口里选本仓库后粘贴）
 ```
-我们要做一个 iOS App，仓库在 https://github.com/Marc506/1 。请严格按下面顺序做：
+这个仓库是网页版「地点收藏夹」项目，目前只有文档。请严格按下面顺序做：
 
-第一步：如果当前目录不是这个仓库，执行 `git clone https://github.com/Marc506/1.git && cd 1`。
-然后完整阅读 CLAUDE.md、docs/ARCHITECTURE.md、docs/DECISIONS.md。现在不要写任何代码。
+第一步：完整阅读 CLAUDE.md、docs/ARCHITECTURE.md、docs/DECISIONS.md。现在不要写任何代码。
 
 第二步：把 docs/ARCHITECTURE.md 第 10 节的全部问题（编号、问题、选项、默认值）完整列出来给我，
 一个都不要省，然后停下来等我回答。我回答后，把答案写进 docs/DECISIONS.md；
 我留空的项按文档默认值执行，之后不要再追问。
 
-第三步：按 CLAUDE.md 第 1 节设置 git 身份（用我在 H-21 给的姓名和邮箱），
-提交 DECISIONS.md。所有 commit 只能是我的名字，绝不能出现 Claude / Anthropic /
-Co-Authored-By / Generated with 等任何字样，每次推送前按 CLAUDE.md 的自检命令检查。
+第三步：按 CLAUDE.md 第 1 节设置 git 身份（用我在 G-19 给的姓名和邮箱），提交 DECISIONS.md。
+所有 commit 只能是我的名字，绝不能出现 Claude / Anthropic / Co-Authored-By / Generated with
+等任何字样，每次推送前按 CLAUDE.md 的自检命令检查。
 
-第四步：检查本机工具（Xcode、xcodegen、swiftlint、swiftformat、node、pnpm、wrangler），
-缺什么告诉我怎么装。然后从 Phase 0 开始按路线图推进，每完成一个 checklist 项就编译、测试、提交一次。
-写 Claude API 相关代码前先调用 claude-api skill。文档里标注「需核实」的 API 以实际编译结果和官方文档为准。
+第四步：按文档 0.3 节自检环境（WebKit、本地 Postgres、网络放行），缺什么一句话告诉我要放行哪个域名，
+先做不依赖它的部分。然后从 Phase 0 开始按路线图推进：每完成一个 checklist 项就跑
+lint / typecheck / test / e2e，通过后提交，并用 Playwright 的 iPhone 视口截图给我看页面。
+需要我在 Google Cloud、Vercel、Neon 上操作的事，按文档 8.5 节给我一步一步的指引。
 用中文和我沟通，如实区分已验证 / 未验证 / 被阻塞。现在开始第一步。
 ```
 
-### C. 参考资料
-- Apple 开发者论坛：iOS 14 Maps Guides API（无官方 API）— https://developer.apple.com/forums/thread/663915
-- Apple 支持：在 Apple Maps 中使用指南（仅手动）— https://support.apple.com/guide/maps/mps23f9c5bb1/mac
-- WWDC24 10097「Unlock the power of places in MapKit」（Place ID、`MKMapItemRequest`、地点卡片）— https://developer.apple.com/videos/play/wwdc2024/10097/
-- WWDC25 204「Go further with MapKit」（Place ID 持久性、新地理编码 API）— https://developer.apple.com/videos/play/wwdc2025/204
+### D. 参考资料
+- Apple 开发者论坛：Maps Guides 无公开 API — https://developer.apple.com/forums/thread/663915
+- Apple 旧版 Map Links 参数（`q`、`ll`、`daddr`、`dirflg`）— https://developer.apple.com/library/iad/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html
 - Apple「Adopting unified Maps URLs」— https://developer.apple.com/documentation/mapkit/unified-map-urls
-- Apple 旧版 Map Links 参数 — https://developer.apple.com/library/iad/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html
-- `MKMapItem.identifier` iOS 18 讨论 — https://developer.apple.com/forums/thread/769699
 - Google Maps URLs（search / dir）— https://developers.google.com/maps/documentation/urls/get-started
+- Google Places API (New) Text Search — https://developers.google.com/maps/documentation/places/web-service/text-search
+- Google Maps Platform 定价与免费额度 — https://developers.google.com/maps/billing-and-pricing/pricing
 - Google My Maps 导入限制 — https://support.google.com/mymaps/answer/3024836
-- Google Maps Platform 定价 — https://developers.google.com/maps/billing-and-pricing/pricing
-- Foundation Models 概览（第三方整理）— https://www.atelier-socle.com/en/articles/foundation-models-api-guide
+- OpenFreeMap（免费底图）— https://openfreemap.org
+- MapLibre GL JS — https://maplibre.org
+- Playwright 设备模拟（WebKit / iPhone）— https://playwright.dev/docs/emulation
+- Claude Code 云端环境网络设置 — https://code.claude.com/docs/en/cloud-environments#network-access
