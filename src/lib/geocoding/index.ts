@@ -19,6 +19,12 @@ export function getFallbackProvider(): GeocodingProvider {
   return nominatim;
 }
 
+export function getPrimaryProviderId(): "google" | "nominatim" {
+  return process.env.GEOCODING_PROVIDER === "nominatim"
+    ? "nominatim"
+    : "google";
+}
+
 /** The provider chosen by GEOCODING_PROVIDER (default: google). */
 export function getPrimaryProvider(): GeocodingProvider {
   const choice = process.env.GEOCODING_PROVIDER ?? "google";

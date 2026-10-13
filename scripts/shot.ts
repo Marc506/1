@@ -5,6 +5,7 @@
  *   pnpm shot /                 -> artifacts/home-iphone-<engine>.png
  *   pnpm shot /login --lang=en  -> force the UI language
  *   pnpm shot / --desktop       -> desktop viewport instead
+ *   pnpm shot /c/<id>/add --type="Katz's"  -> type into the focused field
  *
  * Uses SHOT_BASE_URL if set; otherwise starts `next start` on port 3200 from
  * the existing build (run `pnpm build` or `pnpm e2e` first) and stops it after.
@@ -24,6 +25,9 @@ const args = process.argv.slice(2);
 const target = args.find((a) => !a.startsWith("--")) ?? "/";
 const desktop = args.includes("--desktop");
 const lang = args.find((a) => a.startsWith("--lang="))?.slice("--lang=".length);
+const typed = args
+  .find((a) => a.startsWith("--type="))
+  ?.slice("--type=".length);
 
 const PORT = 3200;
 const baseURL = process.env.SHOT_BASE_URL ?? `http://localhost:${PORT}`;
@@ -95,10 +99,17 @@ async function main() {
       await page.goto(target, { waitUntil: "networkidle" });
     }
 
+    if (typed) {
+      await page.keyboard.type(typed);
+      // Debounce plus the search round trip.
+      await page.waitForTimeout(1_500);
+      await page.waitForLoadState("networkidle");
+    }
+
     mkdirSync("artifacts", { recursive: true });
     const file = path.join(
       "artifacts",
-      `${slug(target)}-${desktop ? "desktop" : "iphone"}-${engine}${lang ? `-${lang}` : ""}.png`,
+      `${slug(target)}${typed ? "-typed" : ""}-${desktop ? "desktop" : "iphone"}-${engine}${lang ? `-${lang}` : ""}.png`,
     );
     await page.screenshot({ path: file, fullPage: true });
     console.log(file);

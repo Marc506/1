@@ -4,15 +4,18 @@ import { BackLink, PageShell } from "@/components/page-shell";
 import { requireOwnerId } from "@/lib/auth/server";
 import { getDb } from "@/lib/db/client";
 import { getCollection } from "@/lib/db/queries/collections";
+import { listCollectionPlaces } from "@/lib/db/queries/places";
 import { fmt } from "@/lib/i18n/format";
 import { getDictionary } from "@/lib/i18n/server";
 
 export default async function CollectionPage({ params }: PageProps<"/c/[id]">) {
   const ownerId = await requireOwnerId();
   const { id } = await params;
-  const [t, collection] = await Promise.all([
+  const db = getDb();
+  const [t, collection, places] = await Promise.all([
     getDictionary(),
-    getCollection(getDb(), ownerId, id),
+    getCollection(db, ownerId, id),
+    listCollectionPlaces(db, ownerId, id),
   ]);
   if (!collection) notFound();
 
@@ -65,10 +68,37 @@ export default async function CollectionPage({ params }: PageProps<"/c/[id]">) {
         </p>
       )}
 
-      <section className="mt-4 rounded-2xl border border-border bg-surface px-5 py-10 text-center">
-        <h2 className="text-base font-medium">{t.collection.noPlacesTitle}</h2>
-        <p className="mt-1 text-sm text-muted">{t.collection.noPlacesBody}</p>
-      </section>
+      {!collection.archived && (
+        <Link
+          href={`/c/${collection.id}/add`}
+          className="mt-3 flex h-12 items-center justify-center gap-2 rounded-xl bg-accent text-base font-medium text-white active:opacity-80"
+        >
+          <span aria-hidden>＋</span>
+          {t.add.addButton}
+        </Link>
+      )}
+
+      {places.length ? (
+        <ul className="mt-4 flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface">
+          {places.map((p) => (
+            <li key={p.id} className="flex flex-col px-4 py-3">
+              <span className="text-base font-medium">{p.name}</span>
+              <span className="text-sm text-muted">
+                {[t.categories[p.category], p.formattedAddress]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <section className="mt-4 rounded-2xl border border-border bg-surface px-5 py-10 text-center">
+          <h2 className="text-base font-medium">
+            {t.collection.noPlacesTitle}
+          </h2>
+          <p className="mt-1 text-sm text-muted">{t.collection.noPlacesBody}</p>
+        </section>
+      )}
     </PageShell>
   );
 }

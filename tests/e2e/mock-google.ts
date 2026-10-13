@@ -17,6 +17,7 @@ const RESPONSES: Record<string, unknown> = {
   "new york": fixture("text-search-city-new-york.json"),
   东京: fixture("text-search-city-tokyo-zh.json"),
   "katz's": fixture("text-search-katz.json"),
+  "纽约 lilia 意面": fixture("text-search-zh.json"),
 };
 
 const server = createServer((req, res) => {

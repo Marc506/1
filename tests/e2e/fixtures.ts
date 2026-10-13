@@ -1,5 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { test as base, type BrowserContext } from "@playwright/test";
+import {
+  expect,
+  test as base,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 import { E2E_SESSION_SECRET } from "./env";
 
@@ -33,6 +38,18 @@ export const test = base.extend<Fixtures>({
     });
   },
 });
+
+/**
+ * Phone-first guard: nothing may be wider than the viewport. On iOS an
+ * overflowing element zooms the page out and misaligns fixed bars.
+ */
+export async function expectNoHorizontalOverflow(page: Page) {
+  const viewport = page.viewportSize()!.width;
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width, "page is wider than the viewport").toBeLessThanOrEqual(
+    viewport,
+  );
+}
 
 export async function addSessionCookie(
   context: BrowserContext,
