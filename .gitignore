@@ -21,6 +21,9 @@
 # local Postgres data (pnpm db:start)
 /.pgdata/
 
+# copied from node_modules on install
+/public/vendor/
+
 # misc
 .DS_Store
 *.pem

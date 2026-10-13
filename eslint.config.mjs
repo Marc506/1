@@ -85,6 +85,7 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "artifacts/**",
     ".pgdata/**",
+    "public/vendor/**",
   ]),
 ]);
 

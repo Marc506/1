@@ -10,6 +10,18 @@ import { E2E_SESSION_SECRET } from "./env";
 
 export { expect } from "@playwright/test";
 
+const BLANK_MAP_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#e9eee9" },
+    },
+  ],
+};
+
 type Fixtures = {
   /**
    * Signs in without the login form. Each test gets its own owner id, so
@@ -30,6 +42,16 @@ export const test = base.extend<Fixtures>({
       "x-forwarded-for": `10.${a}.${b}.${c}`,
     });
     await use(context);
+  },
+  // Map tiles come from OpenFreeMap. Serve a blank style instead so tests
+  // need no network and stay deterministic.
+  page: async ({ page }, use) => {
+    await page.route("https://tiles.openfreemap.org/**", (route) =>
+      route.request().url().includes("/styles/")
+        ? route.fulfill({ json: BLANK_MAP_STYLE })
+        : route.fulfill({ status: 204 }),
+    );
+    await use(page);
   },
   signIn: async ({ context, baseURL }, use) => {
     await use(async (ownerId = `e2e-${randomUUID()}`) => {

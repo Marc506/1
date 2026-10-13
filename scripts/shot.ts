@@ -5,7 +5,10 @@
  *   pnpm shot /                 -> artifacts/home-iphone-<engine>.png
  *   pnpm shot /login --lang=en  -> force the UI language
  *   pnpm shot / --desktop       -> desktop viewport instead
+ *   pnpm shot / --full          -> whole page instead of one screen (fixed
+ *                                  bars then appear mid-page)
  *   pnpm shot /c/<id>/add --type="Katz's"  -> type into the focused field
+ *   ... --click="Button name"   -> then click that button
  *
  * Uses SHOT_BASE_URL if set; otherwise starts `next start` on port 3200 from
  * the existing build (run `pnpm build` or `pnpm e2e` first) and stops it after.
@@ -24,12 +27,17 @@ import {
 const args = process.argv.slice(2);
 const target = args.find((a) => !a.startsWith("--")) ?? "/";
 const desktop = args.includes("--desktop");
+const fullPage = args.includes("--full");
 const lang = args.find((a) => a.startsWith("--lang="))?.slice("--lang=".length);
+const clickName = args
+  .find((a) => a.startsWith("--click="))
+  ?.slice("--click=".length);
 const typed = args
   .find((a) => a.startsWith("--type="))
   ?.slice("--type=".length);
 
 const PORT = 3200;
+const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const baseURL = process.env.SHOT_BASE_URL ?? `http://localhost:${PORT}`;
 
 async function isUp(url: string): Promise<boolean> {
@@ -89,6 +97,26 @@ async function main() {
   try {
     const context = await browser.newContext({ ...contextOptions, baseURL });
     const page = await context.newPage();
+    if (!(await isUp(MAP_STYLE_URL))) {
+      // The cloud container cannot reach the tile server; use a plain
+      // background so pins and layout still show.
+      console.log("note: map tiles unreachable, using a blank map style");
+      await page.route("https://tiles.openfreemap.org/**", (route) =>
+        route.fulfill({
+          json: {
+            version: 8,
+            sources: {},
+            layers: [
+              {
+                id: "bg",
+                type: "background",
+                paint: { "background-color": "#e9eee9" },
+              },
+            ],
+          },
+        }),
+      );
+    }
     await page.goto(target, { waitUntil: "networkidle" });
 
     const password = process.env.APP_PASSWORD;
@@ -106,12 +134,17 @@ async function main() {
       await page.waitForLoadState("networkidle");
     }
 
+    if (clickName) {
+      await page.getByRole("button", { name: clickName }).click();
+      await page.waitForTimeout(1_000);
+    }
+
     mkdirSync("artifacts", { recursive: true });
     const file = path.join(
       "artifacts",
-      `${slug(target)}${typed ? "-typed" : ""}-${desktop ? "desktop" : "iphone"}-${engine}${lang ? `-${lang}` : ""}.png`,
+      `${slug(target)}${typed ? "-typed" : ""}${clickName ? "-clicked" : ""}-${desktop ? "desktop" : "iphone"}-${engine}${lang ? `-${lang}` : ""}.png`,
     );
-    await page.screenshot({ path: file, fullPage: true });
+    await page.screenshot({ path: file, fullPage });
     console.log(file);
     if (!useWebKit && !desktop) {
       console.log("note: iPhone viewport on Chromium (未在 WebKit 验证)");

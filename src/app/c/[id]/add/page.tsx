@@ -24,7 +24,14 @@ export default async function AddPlacePage({
         {t.add.title}
       </h1>
       <AddPlace
-        collection={{ id: collection.id, cityName: collection.cityName }}
+        collection={{
+          id: collection.id,
+          cityName: collection.cityName,
+          center:
+            collection.centerLat !== null && collection.centerLng !== null
+              ? { lat: collection.centerLat, lng: collection.centerLng }
+              : null,
+        }}
         t={t.add}
         categories={t.categories}
         sourceKinds={t.sourceKinds}

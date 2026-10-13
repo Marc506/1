@@ -74,6 +74,14 @@ const zhCN = {
     savedExisting: "已收藏过，已把新理由追加到它",
     savedAlreadyHere: "这个地点已经在本集合里了",
     recentTitle: "刚添加的 {count} 个",
+    noneOfThese: "都不是？手动放置",
+    manualTitle: "手动放置",
+    manualHelp: "拖动地图，让中间的针对准这个地点。",
+    manualName: "名称",
+    manualCategory: "分类",
+    backToResults: "返回候选",
+    mapUnavailable: "地图加载失败，暂时无法手动放置。",
+    saveManual: "保存「{name}」（手动放置）",
     errors: {
       network: "网络好像断了。输入的内容已保存在本页，恢复后再试。",
       provider_unavailable: "搜索服务暂时不可用，稍后再试。",
@@ -207,6 +215,15 @@ const en: Dictionary = {
     savedExisting: "Already saved; added the new reason to it",
     savedAlreadyHere: "This place is already in this collection",
     recentTitle: "Just added ({count})",
+    noneOfThese: "None of these? Place it yourself",
+    manualTitle: "Place it yourself",
+    manualHelp: "Move the map until the pin points at the place.",
+    manualName: "Name",
+    manualCategory: "Category",
+    backToResults: "Back to results",
+    mapUnavailable:
+      "The map couldn't load, so you can't place a pin right now.",
+    saveManual: "Save “{name}” (placed by hand)",
     errors: {
       network:
         "You seem to be offline. What you typed is kept on this page; try again when you're back.",

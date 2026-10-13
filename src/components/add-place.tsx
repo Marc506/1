@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SourceKind } from "@/lib/db/schema";
+import {
+  PLACE_CATEGORIES,
+  type PlaceCategory,
+  type SourceKind,
+} from "@/lib/db/schema";
 import type { CollectionSearchResult } from "@/lib/geocoding/search";
 import type { RankedCandidate } from "@/lib/geocoding/rank";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { fmt } from "@/lib/i18n/format";
 import { formatDistance } from "@/lib/matching/geo";
+import { CandidateMap } from "./map/candidate-map";
+import { PinPicker, type LatLng } from "./map/pin-picker";
 import { SOURCE_KIND_OPTIONS } from "./source-kinds";
 
 type SearchOk = Extract<CollectionSearchResult, { ok: true }>;
@@ -34,11 +40,34 @@ const EMPTY_DETAILS: Details = {
   priority: 1,
 };
 
+type Manual = {
+  name: string;
+  category: PlaceCategory;
+  /** Where the map opens. */
+  initial: LatLng;
+  zoom: number;
+  /** Current map center, reported by the map; null until it loads. */
+  center: LatLng | null;
+};
+
+const WORLD: LatLng = { lat: 20, lng: 0 };
+
+/** What gets saved: a matched candidate or a hand-placed pin. */
+type Target = {
+  provider: string;
+  providerPlaceId: string | null;
+  name: string;
+  formattedAddress: string | null;
+  lat: number;
+  lng: number;
+  category: PlaceCategory;
+};
+
 const DEBOUNCE_MS = 400;
 const MIN_CHARS = 2;
 
 type Props = {
-  collection: { id: string; cityName: string | null };
+  collection: { id: string; cityName: string | null; center: LatLng | null };
   t: Dictionary["add"];
   categories: Dictionary["categories"];
   sourceKinds: Dictionary["sourceKinds"];
@@ -65,6 +94,7 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [recent, setRecent] = useState<{ id: string; name: string }[]>([]);
+  const [manual, setManual] = useState<Manual | null>(null);
 
   const runSearch = useCallback(
     async (query: string) => {
@@ -139,9 +169,22 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
   const candidates =
     search.status === "done" ? search.result.candidates : ([] as const);
   const chosen: RankedCandidate | undefined = candidates[selected];
+  const target: Target | undefined = manual
+    ? manual.center && manual.name.trim()
+      ? {
+          provider: "manual",
+          providerPlaceId: null,
+          name: manual.name.trim(),
+          formattedAddress: null,
+          lat: manual.center.lat,
+          lng: manual.center.lng,
+          category: manual.category,
+        }
+      : undefined
+    : chosen;
 
   async function save() {
-    if (!chosen || saving) return;
+    if (!target || saving) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -151,13 +194,13 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
         body: JSON.stringify({
           collectionId: collection.id,
           candidate: {
-            provider: chosen.provider,
-            providerPlaceId: chosen.providerPlaceId,
-            name: chosen.name,
-            formattedAddress: chosen.formattedAddress,
-            lat: chosen.lat,
-            lng: chosen.lng,
-            category: chosen.category,
+            provider: target.provider,
+            providerPlaceId: target.providerPlaceId,
+            name: target.name,
+            formattedAddress: target.formattedAddress,
+            lat: target.lat,
+            lng: target.lng,
+            category: target.category,
           },
           why: details.why,
           note: details.note,
@@ -186,7 +229,7 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
             : t.saved,
       );
       if (!body.alreadyInCollection) {
-        setRecent((r) => [{ id: body.placeId, name: chosen.name }, ...r]);
+        setRecent((r) => [{ id: body.placeId, name: target.name }, ...r]);
       }
       // Ready for the next one.
       requestId.current++;
@@ -194,6 +237,7 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
       setDetails(EMPTY_DETAILS);
       setDetailsOpen(false);
       setSearch({ status: "idle" });
+      setManual(null);
       inputRef.current?.focus();
     } catch {
       setSaveError(t.errors.network);
@@ -203,6 +247,17 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
   }
 
   const bias = search.status === "done" ? search.result.bias : null;
+
+  function startManual() {
+    const known = bias ?? collection.center ?? chosen ?? null;
+    setManual({
+      name: text.trim(),
+      category: "other",
+      initial: known ? { lat: known.lat, lng: known.lng } : WORLD,
+      zoom: known ? 14 : 1.5,
+      center: null,
+    });
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -268,13 +323,28 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
         </p>
       )}
 
-      {search.status === "done" && candidates.length === 0 && (
+      {!manual && search.status === "done" && candidates.length === 0 && (
         <p className="mt-3 rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm text-muted">
           {t.noResults}
         </p>
       )}
 
-      {candidates.length > 0 && (
+      {!manual && candidates.length > 0 && (
+        <CandidateMap
+          className="mt-3 h-44"
+          points={candidates.map((c, i) => ({
+            key: String(i),
+            lat: c.lat,
+            lng: c.lng,
+            label: String(i + 1),
+            title: `${i + 1}. ${c.name}`,
+            active: i === selected,
+          }))}
+          onSelect={(key) => setSelected(Number(key))}
+        />
+      )}
+
+      {!manual && candidates.length > 0 && (
         <div
           role="radiogroup"
           aria-label={t.candidatesLabel}
@@ -325,6 +395,77 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
             );
           })}
         </div>
+      )}
+
+      {!manual && search.status === "done" && (
+        <button
+          type="button"
+          onClick={startManual}
+          className="mt-2 min-h-11 self-center rounded-lg px-3 text-sm text-accent active:bg-border"
+        >
+          {t.noneOfThese}
+        </button>
+      )}
+
+      {manual && (
+        <section
+          aria-label={t.manualTitle}
+          className="mt-3 flex flex-col gap-3"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-medium">{t.manualTitle}</h2>
+            <button
+              type="button"
+              onClick={() => setManual(null)}
+              className="min-h-11 rounded-lg px-2 text-sm text-accent active:bg-border"
+            >
+              {t.backToResults}
+            </button>
+          </div>
+          <p className="text-sm text-muted">{t.manualHelp}</p>
+          <PinPicker
+            className="h-72"
+            initial={manual.initial}
+            zoom={manual.zoom}
+            unavailableText={t.mapUnavailable}
+            onChange={(center) => setManual((m) => (m ? { ...m, center } : m))}
+          />
+          <p
+            data-testid="pin-coordinates"
+            className="-mt-1 text-right font-mono text-xs text-muted"
+          >
+            {manual.center
+              ? `${manual.center.lat.toFixed(5)}, ${manual.center.lng.toFixed(5)}`
+              : "—"}
+          </p>
+          <Field label={t.manualName} htmlFor="manual-name">
+            <input
+              id="manual-name"
+              value={manual.name}
+              onChange={(e) => setManual({ ...manual, name: e.target.value })}
+              className="h-11 rounded-xl border border-border bg-surface px-3 text-base outline-none focus:border-accent"
+            />
+          </Field>
+          <Field label={t.manualCategory} htmlFor="manual-category">
+            <select
+              id="manual-category"
+              value={manual.category}
+              onChange={(e) =>
+                setManual({
+                  ...manual,
+                  category: e.target.value as PlaceCategory,
+                })
+              }
+              className="h-11 rounded-xl border border-border bg-surface px-2 text-base"
+            >
+              {PLACE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {categories[c]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </section>
       )}
 
       <details
@@ -464,13 +605,15 @@ export function AddPlace({ collection, t, categories, sourceKinds }: Props) {
           <button
             type="button"
             onClick={() => void save()}
-            disabled={!chosen || saving}
+            disabled={!target || saving}
             className="h-12 truncate rounded-xl bg-accent px-4 text-base font-medium text-white active:opacity-80 disabled:opacity-40"
           >
             {saving
               ? t.saving
-              : chosen
-                ? fmt(t.saveNamed, { name: chosen.name })
+              : target
+                ? fmt(manual ? t.saveManual : t.saveNamed, {
+                    name: target.name,
+                  })
                 : t.save}
           </button>
         </div>
