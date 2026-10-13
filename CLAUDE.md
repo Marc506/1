@@ -19,7 +19,9 @@
 5. 不要 force-push `main`。使用功能分支 + PR。
 
 ## 2. 架构与范围
-- 架构文档：`docs/ARCHITECTURE.md`；所有者的决策：`docs/DECISIONS.md`。未回答的决策项按架构文档第 10 节的默认值执行，不要停下来等。
+- 架构文档：`docs/ARCHITECTURE.md`；所有者的决策：`docs/DECISIONS.md`。
+- 首次开工时，先把架构文档第 10 节的全部问题完整打印给所有者并等待回答，再写任何代码；收到回答后写入 `docs/DECISIONS.md` 并提交。此后仍为空的决策项按第 10 节默认值执行，不再追问。
+- 本项目在所有者的 Mac 本地开发：每个 checklist 项提交前必须真的执行编译与测试。
 - 不要擅自扩大范围。按路线图 Phase 顺序推进；每个 checklist 项完成即提交。
 - 文档中标注「需核实」的 API 细节，以实际编译结果与 Apple 官方文档为准。
 

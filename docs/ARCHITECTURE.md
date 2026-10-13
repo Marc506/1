@@ -9,10 +9,13 @@
 ## 0. 给执行者（Opus）的说明 — 先读这一节
 
 ### 0.1 这份文档怎么用
-1. 先读 **第 2 节（硬约束）** 和 **第 10 节（决策清单）**。第 10 节里每个问题都有「默认值」；Marc 没回答的项一律按默认值执行，不要停下来等。
-2. 按 **第 9 节路线图** 的 Phase 顺序推进：先把 Phase 0 骨架做到「可编译、可测试、CI 绿」，再做功能。每个 Phase 结束都要有能跑的东西。
-3. 实现时遇到文档标注 **「需核实」** 的 API 细节，以 Xcode / Apple 官方文档 / 实际编译结果为准，文档只给方向。
-4. 任何涉及 Claude API 的代码，先调用 `claude-api` skill 再写（模型 ID、结构化输出、refusal 处理都以 skill 为准，不要凭记忆写）。
+开工顺序是固定的，按 ①→②→③ 做，不要跳步：
+
+1. **① 拉取仓库**：Opus 跑在 Marc 的 Mac 本地。如果当前目录不是本仓库，先执行 `git clone https://github.com/Marc506/1.git && cd 1`；然后完整阅读 `CLAUDE.md`、本文档和 `docs/DECISIONS.md`。
+2. **② 先问再做**：把 **第 10 节的全部问题**（编号、问题、选项、默认值）完整打印在聊天里给 Marc，**然后停下来等他回答**，不要先写任何代码。H-21（commit 姓名和邮箱）是必填项，拿不到就不能提交。收到回答后：把答案写进 `docs/DECISIONS.md`；按 0.2 节设置 git 身份；提交这一次改动。Marc 留空的项从此按默认值执行，不再追问。
+3. **③ 按路线图开工**：按 **第 9 节** 的 Phase 顺序推进：先把 Phase 0 骨架做到「可编译、可测试、CI 绿」，再做功能。每个 Phase 结束都要有能跑的东西。
+4. 实现时遇到文档标注 **「需核实」** 的 API 细节，以 Xcode / Apple 官方文档 / 实际编译结果为准，文档只给方向。
+5. 任何涉及 Claude API 的代码，先调用 `claude-api` skill 再写（模型 ID、结构化输出、refusal 处理都以 skill 为准，不要凭记忆写）。
 
 ### 0.2 Git / GitHub 硬性规则（最高优先级）
 - **所有 commit 的 author 和 committer 必须是 Marc 本人**（姓名和邮箱见第 10 节 H-21）。开工第一步就在仓库内执行：
@@ -31,8 +34,9 @@
 
 ### 0.3 运行环境限制
 - iOS 工程只能在 **macOS + Xcode** 上编译和跑 UI 测试。
-- 如果 Opus 跑在 Claude Code 云端（Linux）：只能写代码、生成工程文件、运行 `Packages/PlaceCore` 的 `swift test`（Swift on Linux）和 `worker/` 的测试；App 层由 Marc 在 Mac 上 `xcodegen generate && xcodebuild …` 验证，Opus 根据报错迭代。
-- 如果 Opus 跑在 Marc 的 Mac 本地（Claude Code CLI）：可以直接 `xcodebuild` 全量编译与测试，这是推荐方式。
+- **已决定：Opus 在 Marc 的 Mac 本地跑（Claude Code CLI）**，可以直接 `xcodegen generate && xcodebuild …` 全量编译与测试。每个 checklist 项提交前都要真的编译一次，不要只靠阅读代码判断。
+- 本地前置条件（Opus 在 ① 之后检查并提示 Marc 安装缺的）：Xcode 16+ 与命令行工具、`brew install xcodegen swiftlint swiftformat`、Node 20+ 与 `pnpm`、Cloudflare `wrangler`（`pnpm add -g wrangler`）。
+- 备用情况：若某次 Opus 跑在 Claude Code 云端（Linux），只能运行 `Packages/PlaceCore` 的 `swift test` 和 `worker/` 的测试，App 层由 Marc 在 Mac 上编译并回传报错；此时要明确说「未验证」。
 - 所以工程要用 **XcodeGen（`project.yml`）生成 `.xcodeproj`**，不要手写或提交 `pbxproj` 的手工改动；凡是能放进纯 Swift Package 的逻辑都放进 `PlaceCore`，让它在 Linux 上可测。
 
 ---
@@ -521,7 +525,7 @@ Apple Maps URL 备用形式（分享到 iMessage 等场景）：旧式 `https://
 | # | 问题 | 为什么重要 | 选项 | 默认 |
 |---|------|-----------|------|------|
 | B-3 | 你有 Mac + Xcode 吗？是否愿意付 Apple Developer Program（$99/年）？ | 没有 Mac 无法编译；没有付费账号就没有 CloudKit / App Group / TestFlight | 有/没有；愿意/不愿意 | 有 Mac，愿意付 |
-| B-4 | Opus 跑在哪？ | 决定谁来编译验证 | ① Claude Code 云端（Linux，只能跑 PlaceCore/worker 测试）② 我 Mac 本地的 Claude Code（可全量编译） | ② 推荐；若 ① 则你负责在 Mac 上编译并把报错贴回 |
+| B-4 | Opus 跑在哪？ | 决定谁来编译验证 | ① Claude Code 云端（Linux，只能跑 PlaceCore/worker 测试）② 我 Mac 本地的 Claude Code（可全量编译） | **已决定：②**（本地）。若临时改用 ① 则你负责在 Mac 上编译并把报错贴回 |
 | B-5 | 最低 iOS 版本 | iOS 18 有 Place ID 和地点卡片；iOS 26 才有端侧模型和新 MapKit API | iOS 18 / iOS 26 | iOS 18，端侧功能 `#available(iOS 26)` |
 
 ### C. 输入来源
@@ -593,12 +597,27 @@ Apple Maps URL 备用形式（分享到 iMessage 等场景）：旧式 `https://
 | 解析分享链接 | `maps.apple.com/?…ll=…&q=…`、`maps.apple.com/place?place-id=…`、短链 `maps.apple/p/…`（跟随跳转） | `maps.app.goo.gl/…` → 跟随跳转 → `/maps/place/<name>/@<lat>,<lng>,…` |
 
 ### B. 给 Opus 的开场提示词（Marc 复制即用）
+
+在 Mac 终端里先 `cd` 到你想放项目的目录（例如 `~/code`），启动 Claude Code 后把下面整段粘进去：
+
 ```
-请先完整阅读 docs/ARCHITECTURE.md 和 docs/DECISIONS.md（我的回答；没回答的按文档默认值）。
-严格遵守 CLAUDE.md，尤其是 Git 署名规则：所有 commit 只能用我的姓名和邮箱，
-不得出现任何 Claude / Anthropic / Co-Authored-By / Generated with 等字样，推送前按 CLAUDE.md 自检。
-从 Phase 0 开始，按路线图推进；每完成一个 checklist 项就提交一次；写 Claude API 相关代码前先调用 claude-api skill。
-遇到文档标注「需核实」的 API，以实际编译结果和官方文档为准。开始吧。
+我们要做一个 iOS App，仓库在 https://github.com/Marc506/1 。请严格按下面顺序做：
+
+第一步：如果当前目录不是这个仓库，执行 `git clone https://github.com/Marc506/1.git && cd 1`。
+然后完整阅读 CLAUDE.md、docs/ARCHITECTURE.md、docs/DECISIONS.md。现在不要写任何代码。
+
+第二步：把 docs/ARCHITECTURE.md 第 10 节的全部问题（编号、问题、选项、默认值）完整列出来给我，
+一个都不要省，然后停下来等我回答。我回答后，把答案写进 docs/DECISIONS.md；
+我留空的项按文档默认值执行，之后不要再追问。
+
+第三步：按 CLAUDE.md 第 1 节设置 git 身份（用我在 H-21 给的姓名和邮箱），
+提交 DECISIONS.md。所有 commit 只能是我的名字，绝不能出现 Claude / Anthropic /
+Co-Authored-By / Generated with 等任何字样，每次推送前按 CLAUDE.md 的自检命令检查。
+
+第四步：检查本机工具（Xcode、xcodegen、swiftlint、swiftformat、node、pnpm、wrangler），
+缺什么告诉我怎么装。然后从 Phase 0 开始按路线图推进，每完成一个 checklist 项就编译、测试、提交一次。
+写 Claude API 相关代码前先调用 claude-api skill。文档里标注「需核实」的 API 以实际编译结果和官方文档为准。
+用中文和我沟通，如实区分已验证 / 未验证 / 被阻塞。现在开始第一步。
 ```
 
 ### C. 参考资料
