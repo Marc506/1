@@ -6,7 +6,7 @@
  *   pnpm shot /login --lang=en  -> force the UI language
  *   pnpm shot / --desktop       -> desktop viewport instead
  *
- * Uses SHOT_BASE_URL if set; otherwise starts `next start` on port 3100 from
+ * Uses SHOT_BASE_URL if set; otherwise starts `next start` on port 3200 from
  * the existing build (run `pnpm build` or `pnpm e2e` first) and stops it after.
  * If APP_PASSWORD is set and the page redirects to /login, it logs in first.
  */
@@ -25,7 +25,7 @@ const target = args.find((a) => !a.startsWith("--")) ?? "/";
 const desktop = args.includes("--desktop");
 const lang = args.find((a) => a.startsWith("--lang="))?.slice("--lang=".length);
 
-const PORT = 3100;
+const PORT = 3200;
 const baseURL = process.env.SHOT_BASE_URL ?? `http://localhost:${PORT}`;
 
 async function isUp(url: string): Promise<boolean> {
@@ -41,15 +41,27 @@ async function startServer(): Promise<ChildProcess> {
   if (!existsSync(".next/BUILD_ID")) {
     throw new Error("No production build found. Run `pnpm build` first.");
   }
-  const child = spawn("pnpm", ["start", "-p", String(PORT)], {
+  if (await isUp(baseURL)) {
+    throw new Error(`Port ${PORT} is already in use; stop that server first.`);
+  }
+  // Run the Next binary directly so killing the child stops the server.
+  const child = spawn("node_modules/.bin/next", ["start", "-p", String(PORT)], {
     stdio: "ignore",
-    detached: true,
   });
   for (let i = 0; i < 60; i++) {
     if (await isUp(baseURL)) return child;
     await new Promise((r) => setTimeout(r, 500));
   }
+  await stopServer(child);
   throw new Error(`Server did not start on ${baseURL}`);
+}
+
+async function stopServer(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null) return;
+  const exited = new Promise((r) => child.once("exit", r));
+  child.kill("SIGTERM");
+  await Promise.race([exited, new Promise((r) => setTimeout(r, 5_000))]);
+  if (child.exitCode === null) child.kill("SIGKILL");
 }
 
 function slug(p: string): string {
@@ -58,7 +70,7 @@ function slug(p: string): string {
 }
 
 async function main() {
-  const server = (await isUp(baseURL)) ? undefined : await startServer();
+  const server = process.env.SHOT_BASE_URL ? undefined : await startServer();
   const useWebKit = !desktop && existsSync(webkit.executablePath());
   const browserType = useWebKit ? webkit : chromium;
   const engine = useWebKit ? "webkit" : "chromium";
@@ -95,7 +107,7 @@ async function main() {
     }
   } finally {
     await browser.close();
-    if (server?.pid) process.kill(-server.pid);
+    if (server) await stopServer(server);
   }
 }
 

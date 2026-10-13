@@ -36,7 +36,8 @@ export default defineConfig({
   webServer: {
     command: `pnpm build && pnpm start -p ${PORT}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a stray server would run with different secrets.
+    reuseExistingServer: false,
     env: { APP_PASSWORD: E2E_PASSWORD, SESSION_SECRET: E2E_SESSION_SECRET },
     timeout: 240_000,
     stdout: "ignore",
