@@ -12,7 +12,26 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["tests/unit/**/*.test.ts"],
     environment: "node",
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["tests/unit/**/*.test.ts"],
+          exclude: ["tests/unit/db/**"],
+        },
+      },
+      {
+        // Needs PostgreSQL: `pnpm db:start` locally, a service container in CI.
+        extends: true,
+        test: {
+          name: "db",
+          include: ["tests/unit/db/**/*.test.ts"],
+          globalSetup: ["tests/unit/db/global-setup.ts"],
+          fileParallelism: false,
+        },
+      },
+    ],
   },
 });

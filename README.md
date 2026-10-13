@@ -20,18 +20,23 @@ Requires Node 22 and pnpm 10.
 ```bash
 pnpm install
 cp .env.example .env.local   # then fill in values
+pnpm db:start                # local PostgreSQL 16 in .pgdata/ (no Docker)
+pnpm db:migrate
 pnpm dev
 ```
 
-| Command                        | What it does                                           |
-| ------------------------------ | ------------------------------------------------------ |
-| `pnpm dev`                     | Next.js dev server                                     |
-| `pnpm lint`                    | ESLint + Prettier check (`pnpm format` to fix)         |
-| `pnpm typecheck`               | Generate route types and run `tsc --noEmit`            |
-| `pnpm test`                    | Vitest unit tests                                      |
-| `pnpm e2e`                     | Playwright: iPhone viewport + desktop Chromium         |
-| `pnpm e2e:webkit`              | Only the iPhone WebKit project (needs WebKit)          |
-| `pnpm shot <path> [--desktop]` | Screenshot a page in an iPhone viewport → `artifacts/` |
+| Command                        | What it does                                            |
+| ------------------------------ | ------------------------------------------------------- |
+| `pnpm dev`                     | Next.js dev server                                      |
+| `pnpm db:start` / `db:stop`    | Local PostgreSQL 16 on port 54329 (`scripts/dev-db.sh`) |
+| `pnpm db:generate`             | Generate a migration from `src/lib/db/schema.ts`        |
+| `pnpm db:migrate`              | Apply migrations in `drizzle/` to `DATABASE_URL`        |
+| `pnpm lint`                    | ESLint + Prettier check (`pnpm format` to fix)          |
+| `pnpm typecheck`               | Generate route types and run `tsc --noEmit`             |
+| `pnpm test`                    | Vitest: pure unit tests + DB tests (needs `db:start`)   |
+| `pnpm e2e`                     | Playwright: iPhone viewport + desktop Chromium          |
+| `pnpm e2e:webkit`              | Only the iPhone WebKit project (needs WebKit)           |
+| `pnpm shot <path> [--desktop]` | Screenshot a page in an iPhone viewport → `artifacts/`  |
 
 E2E tests build the app and start it on port 3100. When WebKit is not
 installed they run the iPhone viewport on Chromium instead.
