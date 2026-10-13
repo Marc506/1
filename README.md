@@ -35,6 +35,7 @@ pnpm dev
 | `pnpm typecheck`               | Generate route types and run `tsc --noEmit`             |
 | `pnpm test`                    | Vitest: pure unit tests + DB tests (needs `db:start`)   |
 | `pnpm e2e`                     | Playwright: iPhone viewport + desktop Chromium          |
+| `pnpm check`                   | lint + typecheck + test + e2e (run before every commit) |
 | `pnpm e2e:webkit`              | Only the iPhone WebKit project (needs WebKit)           |
 | `pnpm shot <path> [--desktop]` | Screenshot a page in an iPhone viewport → `artifacts/`  |
 

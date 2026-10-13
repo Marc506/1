@@ -1,18 +1,19 @@
+import { randomBytes } from "node:crypto";
 import { test as base, type BrowserContext } from "@playwright/test";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 import { E2E_SESSION_SECRET } from "./env";
 
 export { expect } from "@playwright/test";
 
-let ipCounter = 0;
-
 export const test = base.extend<{ signIn: () => Promise<void> }>({
-  // Login is rate-limited per client IP. Give every test its own address so
-  // tests don't share a budget (the dev server trusts X-Forwarded-For).
-  context: async ({ context }, use, testInfo) => {
-    ipCounter += 1;
+  // Login is rate-limited per client IP, and the local server trusts
+  // X-Forwarded-For. Give every test a random address so tests never share a
+  // budget. (A per-worker counter is not enough: each project starts fresh
+  // workers, so counters restart and addresses repeat.)
+  context: async ({ context }, use) => {
+    const [a, b, c] = randomBytes(3);
     await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `10.${testInfo.parallelIndex}.${Math.floor(ipCounter / 250)}.${ipCounter % 250}`,
+      "x-forwarded-for": `10.${a}.${b}.${c}`,
     });
     await use(context);
   },
