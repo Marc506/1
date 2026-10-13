@@ -1,0 +1,13 @@
+{
+  "places": [
+    {
+      "id": "fixture-google-nyc",
+      "types": ["locality", "political"],
+      "formattedAddress": "New York, NY, USA",
+      "location": { "latitude": 40.7127753, "longitude": -74.0059728 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000010",
+      "displayName": { "text": "New York", "languageCode": "en" },
+      "primaryType": "locality"
+    }
+  ]
+}

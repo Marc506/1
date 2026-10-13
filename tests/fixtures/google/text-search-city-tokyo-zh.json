@@ -1,0 +1,13 @@
+{
+  "places": [
+    {
+      "id": "fixture-google-tokyo",
+      "types": ["locality", "political"],
+      "formattedAddress": "日本东京都",
+      "location": { "latitude": 35.6764225, "longitude": 139.650027 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000011",
+      "displayName": { "text": "东京", "languageCode": "zh-CN" },
+      "primaryType": "locality"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "places": [
+    {
+      "id": "fixture-google-katz",
+      "types": ["deli", "restaurant", "food", "point_of_interest", "establishment"],
+      "formattedAddress": "205 E Houston St, New York, NY 10002, USA",
+      "location": { "latitude": 40.7222319, "longitude": -73.9873866 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000001",
+      "displayName": { "text": "Katz's Delicatessen", "languageCode": "en" },
+      "primaryType": "deli"
+    },
+    {
+      "id": "fixture-google-katz-shop",
+      "types": ["gift_shop", "store", "point_of_interest", "establishment"],
+      "formattedAddress": "181 E Houston St, New York, NY 10002, USA",
+      "location": { "latitude": 40.7221, "longitude": -73.9889 },
+      "googleMapsUri": "https://maps.google.com/?cid=1000000000000000002",
+      "displayName": { "text": "Katz's Merch Shop", "languageCode": "en" },
+      "primaryType": "gift_shop"
+    }
+  ]
+}
